@@ -13,7 +13,7 @@ class Lookup:
     async def search(
         self,
         query: str | list,
-        type_: str | list,
+        type_: str | list = "equity",
         country: str = "united states",
         *args,
         **kwargs
@@ -81,7 +81,7 @@ class Lookup:
 
 def lookup_search(
     query: str | list,
-    type_: str | list,
+    type_: str | list = "equity",
     country: str = "united states",
     *args,
     **kwargs
@@ -99,7 +99,7 @@ def lookup_search(
 
     lu = Lookup()
     return asyncio.run(
-        lu.search(query=query, type=type_, country=country, *args, **kwargs)
+        lu.search(query=query, type_=type_, country=country, *args, **kwargs)
     )
 
 

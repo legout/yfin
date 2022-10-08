@@ -55,6 +55,7 @@ ALL_MODULES = {
             "fundInceptionDate",
             "lastSplitDate",
             "mostRecentQuarter",
+            "lastDividendDate"
         ],
     },
     "earnings": {"key": None, "convert":"df", "convert_dates": ["earningsDate"]},
@@ -106,7 +107,7 @@ ALL_MODULES = {
     "price": {
         "key": None,
         "convert": "s",
-        "convert_dates": ["preMarketTime", "regularMarketTime"],
+        "convert_dates": ["preMarketTime", "regularMarketTime", "postMarketTime"],
     },
     "quoteType": {
         "key": None,

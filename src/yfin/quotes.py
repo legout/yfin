@@ -3,6 +3,7 @@ from async_requests import async_requests
 import pandas as pd
 import asyncio
 
+
 class Quotes:
     _URL = URLS["quotes"]
     _drop_columns = [
@@ -34,6 +35,8 @@ class Quotes:
         "exchangeTransferDate",
         "dividendDate",
         "ipoExpectedDate",
+        "postMarketTime",
+        "preMarketTime",
     ]
 
     def __init__(self, symbols: str | list | tuple):
@@ -58,23 +61,25 @@ class Quotes:
         )
         params = [dict(symbols=_symbols) for _symbols in self._symbol_chunks]
 
-        self.results = pd.concat(
-            await async_requests(
-                url=self._URL,
-                params=params,
-                parse_func=self._parse_raw,
-                *args,
-                **kwargs
-            ),
-            ignore_index=True,
+        results = await async_requests(
+            url=self._URL, params=params, parse_func=self._parse_raw, *args, **kwargs
         )
+        if isinstance(results, list):
+            results = pd.concat(
+                results,
+                ignore_index=True,
+            )
+
+        self.results = results
 
     @staticmethod
     def _chunk_symbols(symbols: list, chunk_size: int = 1500) -> list:
-        return [
+        chunked_symbols = [
             ",".join(symbols[i * chunk_size : (i + 1) * chunk_size])
             for i in range(len(symbols) // chunk_size + 1)
         ]
+        chunked_symbols = [cs for cs in chunked_symbols if len(cs) > 0]
+        return chunked_symbols
 
     async def _parse_raw(self, response: object) -> pd.DataFrame:
 

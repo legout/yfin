@@ -50,9 +50,9 @@ class History:
 
         results["time"] = results["time"].dt.tz_localize("UTC").dt.tz_convert(timezone)
 
-        return results
+        self.results = results
 
-    async def parse_func(self, key, response):
+    async def _parse_func(self, key, response):
         splits = pd.DataFrame(columns=["time", "splitRatio"])
         dividends = pd.DataFrame(columns=["time", "amount"])
         adjclose = pd.DataFrame(columns=["adjclose"])
@@ -95,4 +95,4 @@ class History:
         return {key: history}
 
     def __call__(self, *args, **kwargs):
-        asyncio.run(self.fetch(*args, **kwargs))
+        return asyncio.run(self.fetch(*args, **kwargs)).results
