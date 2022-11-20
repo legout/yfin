@@ -1,10 +1,13 @@
-import pandas as pd
-from ..constants import COUNTRIES
-from .utils import validate
-from async_requests import async_requests
 import asyncio
-from string import ascii_lowercase, digits
 from itertools import product
+from string import ascii_lowercase, digits
+
+import pandas as pd
+import pyarrow as pa
+from async_requests import async_requests
+
+from ..constants import COUNTRIES
+from ..utils.symbols import validate
 
 
 class Lookup:
@@ -19,8 +22,9 @@ class Lookup:
         **kwargs
     ) -> pd.DataFrame:
         async def parse_func(key, response):
-            res = pd.DataFrame(response["finance"]["result"][0]["documents"])
-            res["query"] = key
+            res = pa.Table.from_pylist(response["finance"]["result"][0]["documents"])
+            # res["query"] = key
+            #res = res.add_column(0, "lookup", [[key] * res.shape[0]])
             return res
 
         if isinstance(query, str):
@@ -51,7 +55,7 @@ class Lookup:
             **kwargs
         )
         if isinstance(res, list):
-            res = pd.concat(res, ignore_index=True)
+            res = pa.concat_tables(res)
         return res
 
     async def lookup(

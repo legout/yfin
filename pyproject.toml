@@ -12,6 +12,7 @@ pandas = "^1.4.4"
 numpy = "^1.23.2"
 requests = "^2.28.1"
 asyncio = "^3.4.3"
+lxml = "^4.9.1"
 
 
 [build-system]

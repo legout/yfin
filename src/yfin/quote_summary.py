@@ -1,6 +1,6 @@
 from datetime import datetime
 from .constants import URLS, QUOTE_SUMMARY_COLUMNS, ALL_MODULES
-from .utils import camel_to_snake, snake_to_camel
+from .utils.base import camel_to_snake, snake_to_camel
 from async_requests import async_requests
 import asyncio
 import pandas as pd
