@@ -1,7 +1,7 @@
-import pandas as pd
-from async_requests import async_requests
-import asyncio
 import numpy as np
+import pandas as pd
+from parallel_requests import parallel_requests
+
 from ..constants import URLS
 
 
@@ -21,7 +21,7 @@ class Search:
         """
         self._query = [query] if isinstance(query, str) else query
 
-    async def fetch1(
+    def fetch1(
         self, quotes_count: int = 10, news_count: int = -1, *args, **kwargs
     ) -> pd.DataFrame:
         """Fetch data.
@@ -40,7 +40,7 @@ class Search:
             for query in self._query
         ]
 
-        results = await async_requests(
+        results = parallel_requests(
             url=self._URL1,
             params=params,
             key=self._query,
@@ -51,17 +51,17 @@ class Search:
             **kwargs
         )
 
-        results = pd.concat(results)
+        # results = pd.concat(results)
 
         return results
 
-    async def fetch2(self, *args, **kwargs):
+    def fetch2(self, *args, **kwargs):
         params = {
             "device": "console",
             "returnMeta": "true",
         }
         url = [self._URL2 + query for query in self._query]
-        results = await async_requests(
+        results = parallel_requests(
             url=url,
             params=params,
             key=self._query,
@@ -72,11 +72,11 @@ class Search:
             **kwargs
         )
 
-        results = pd.concat(results)
+        # results = pd.concat(results)
 
         return results
 
-    async def _parse_func1(self, key, result):
+    def _parse_func1(self, key, result):
         """Parse results from search request."""
         columns = [
             "symbol",
@@ -122,9 +122,9 @@ class Search:
         else:
             results = pd.DataFrame(columns=columns)
 
-        return {key: results}
+        return results
 
-    async def _parse_func2(self, key, result):
+    def _parse_func2(self, key, result):
         "Parse results from search request"
         if "data" in result:
             columns = result["data"]["suggestionMeta"]
@@ -145,14 +145,14 @@ class Search:
                 columns=["symbol", "name", "exchange", "echange_name", "type"]
             )
 
-        return {key: results}
+        return results
 
     def __call__(self, search_assist=1, *args, **kwargs):
         """Fetch data"""
         if search_assist == 1:
-            return asyncio.run(self.fetch1(*args, **kwargs))
+            return self.fetch1(*args, **kwargs)
         else:
-            return asyncio.run(self.fetch2(*args, **kwargs))
+            return self.fetch2(*args, **kwargs)
 
 
 def search(
@@ -174,18 +174,13 @@ def search(
         pd.DataFrame: search results
     """
     s = Search(query=query)
-    if "use_random_proxy" in kwargs:
-        use_random_proxy = kwargs.pop("use_random_proxy")
-    else:
-        use_random_proxy = True
     if search_assist == 1:
         return s(
             search_assist=1,
             quotes_count=quotes_count,
             news_count=news_count,
-            use_random_proxy=use_random_proxy,
             *args,
             **kwargs
         )
     else:
-        return s(search_assist=2, use_random_proxy=use_random_proxy, *args, **kwargs)
+        return s(search_assist=2, *args, **kwargs)

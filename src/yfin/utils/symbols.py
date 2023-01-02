@@ -1,5 +1,6 @@
 import pandas as pd
-from async_requests import requests
+from parallel_requests import parallel_requests
+
 from ..constants import URLS
 
 
@@ -25,7 +26,7 @@ def validate(symbol: str | list, max_symbols=1000, **kwargs):
     params = [{"symbols": ",".join(s)} for s in symbol_]
 
     res = pd.concat(
-        requests(url=url, params=params, parse_func=parse_json, **kwargs)
+        parallel_requests(url=url, params=params, parse_func=parse_json, **kwargs)
     ).rename("valid")
     res.index.names = ["symbol"]
 

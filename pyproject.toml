@@ -1,18 +1,18 @@
 [tool.poetry]
 name = "yfin"
-version = "0.1.0"
+version = "0.1.5"
 description = ""
 authors = ["Volker Lorrmann <volker.lorrmann@gmail.com>"]
 readme = "README.md"
-packages = [{include = "yfin", from = "src"}]
+packages = [{ include = "yfin", from = "src" }]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 pandas = "^1.4.4"
 numpy = "^1.23.2"
 requests = "^2.28.1"
-asyncio = "^3.4.3"
 lxml = "^4.9.1"
+parallel-requests = { git = "https://github.com/legout/parallel-requests" }
 
 
 [build-system]

@@ -1,10 +1,11 @@
-from datetime import datetime
-from .constants import URLS, QUOTE_SUMMARY_COLUMNS, ALL_MODULES
-from .utils.base import camel_to_snake, snake_to_camel
-from async_requests import async_requests
-import asyncio
-import pandas as pd
+import datetime as dt
+import math
 import numpy as np
+import pandas as pd
+from parallel_requests import parallel_requests
+
+from .constants import ALL_MODULES, URLS
+from .utils.base import camel_to_snake, snake_to_camel
 
 # try:
 #     from findata import get_symbolss
@@ -15,16 +16,24 @@ import numpy as np
 #     init = True
 
 
-def _convert_date(date: int | list) -> datetime | list:
+def _convert_date(date: int | list) -> dt.datetime | list:
     if isinstance(date, list):
-        if isinstance(date[0], int):
-            date = [pd.to_datetime(_date, unit="s") for _date in date]
+        if isinstance(date[0], (int, float)):
+            date = [
+                dt.datetime.utcfromtimestamp(int(_date)) if _date else _date
+                for _date in date
+            ]
         else:
-            date = [pd.to_datetime(_date) for _date in date]
-    elif isinstance(date, int):
-        date = pd.to_datetime(date, unit="s")
-    else:
-        date = pd.to_datetime(date)
+            [
+                dt.datetime.utcfromtimestamp(int(_date)) if _date else _date
+                for _date in date
+            ]
+
+    elif isinstance(date, (int, float)):
+        if not math.isnan(date):
+            date = dt.datetime.utcfromtimestamp(int(date))
+    # else:
+    #    date = dt.datetime.utcfromtimestamp(int(date))
     return date
 
 
@@ -50,7 +59,7 @@ class QuoteSummary:
         self._symbols = symbols  # dict.fromkeys(self._modules, [])
         self.results = dict()
 
-    async def fetch(
+    def fetch(
         self, modules: str | list | None = None, parse: bool = True, *args, **kwargs
     ):
         # self.symbols = symbols
@@ -78,7 +87,7 @@ class QuoteSummary:
             _modules = [
                 module
                 for module in self._modules
-                if not await self._module_already_fetched(module)
+                if not self._module_already_fetched(module)
             ]
 
         else:
@@ -95,7 +104,7 @@ class QuoteSummary:
                 "corsDomain": "finance.yahoo.com",
             }
 
-            results = await async_requests(
+            results = parallel_requests(
                 url=self._url,
                 params=params,
                 key=self.symbols,
@@ -130,9 +139,9 @@ class QuoteSummary:
         else:
             print("Nothing todo. Module already fetched or module unknown.")
 
-    async def _parse_raw(self, key: str, response: object) -> dict:
+    def _parse_raw(self, key: str, response: object) -> dict:
         if response["quoteSummary"]["result"] is None:
-            result = {key: None}
+            result = None
         else:
             res = response["quoteSummary"]["result"][0]
             # modules = list(res.keys())
@@ -144,24 +153,24 @@ class QuoteSummary:
                         res[module] = res[snake_to_camel(module)]
                         res.pop(snake_to_camel(module))
 
-            result = {key: res}
+            result = res
 
         return result
 
-    async def _module_already_fetched(self, module: str) -> bool:
+    def _module_already_fetched(self, module: str) -> bool:
         if not hasattr(self, "_results_raw"):
             return False
         else:
             return module in self._results_raw[self._symbols[0]].keys()
 
-    async def _module_already_formated(self, module: str) -> bool:
+    def _module_already_formated(self, module: str) -> bool:
         if not hasattr(self, "results"):
             return False
         else:
             return module in self.results
 
     @staticmethod
-    async def _extract_raw(results: dict):
+    def _extract_raw(results: dict):
         if results is not None:
             if "maxAge" in results:
                 results.pop("maxAge", None)
@@ -172,22 +181,37 @@ class QuoteSummary:
                     if "raw" in results[k]:
                         results_[k] = results[k]["raw"]
                     elif results[k] == dict():
-                        results_[k] = np.nan
+                        results_[k] = None
+                    else:
+                        results_[k] = results[k]
+                elif isinstance(results[k], list):
+                    if len(results[k]) > 0:
+                        results[k] = results[k][0]
+                        if "raw" in results[k]:
+                            results_[k] = results[k]["raw"]
+                        elif results[k] == dict():
+                            results_[k] = np.nan
+                        else:
+                            results_[k] = results[k]
                     else:
                         results_[k] = results[k]
                 else:
                     results_[k] = results[k]
 
-            return results_
+        return results_
+
+        return results
 
     @staticmethod
-    async def _to_dataframe(results: list, convert_dates: list = None) -> pd.DataFrame:
+    def _to_dataframe(results: list, convert_dates: list = None) -> pd.DataFrame:
         results = pd.DataFrame(results)
         if convert_dates is not None:
             for col in convert_dates:
                 if col in results:
-                    # pass
-                    results[col] = results[col].apply(_convert_date)
+                    results[col] = results[col].dropna().apply(_convert_date)
+        for col in results.columns:
+            if col not in convert_dates:
+                results[col] = results[col].apply(pd.to_numeric, errors="ignore")
             # results = results.astype(dict.fromkeys(convert_dates, "datetime64[s]"))
 
         results.columns = camel_to_snake(results.columns.tolist())
@@ -195,27 +219,26 @@ class QuoteSummary:
         return results
 
     @staticmethod
-    async def _to_series(results: list, convert_dates: list = None) -> pd.DataFrame:
+    def _to_series(results: list, convert_dates: list = None) -> pd.DataFrame:
         results = pd.Series(results)
         if convert_dates is not None:
             for idx in convert_dates:
                 if idx in results:
-                    # pass
-                    results[idx] = _convert_date(results[idx])
-                    # results[idx] = pd.to_datetime(results[idx], unit="s")
+                    if results[idx]:
+                        results[idx] = _convert_date(results[idx])
 
         results.index = camel_to_snake(results.index.tolist())
 
         return results
 
-    async def _format_earnings_trends(self, result: dict):
+    def _format_earnings_trends(self, result: dict):
 
         formatted_results = dict()
 
         formatted_results["period"] = result["period"]
         formatted_results["date"] = result["endDate"]
 
-        earnings_estimate = await self._extract_raw(result["earningsEstimate"])
+        earnings_estimate = self._extract_raw(result["earningsEstimate"])
         earnings_estimate_keys = [
             "earnings_estimate_" + idx for idx in earnings_estimate.keys()
         ]
@@ -224,26 +247,26 @@ class QuoteSummary:
         )
         formatted_results.update(earnings_estimate)
 
-        revenue_estimate = await self._extract_raw(result["revenueEstimate"])
+        revenue_estimate = self._extract_raw(result["revenueEstimate"])
         revenue_estimate_keys = [
             "revenue_estimate_" + idx for idx in revenue_estimate.keys()
         ]
         revenue_estimate = dict(zip(revenue_estimate_keys, revenue_estimate.values()))
         formatted_results.update(revenue_estimate)
 
-        eps_revisions = await self._extract_raw(result["epsRevisions"])
+        eps_revisions = self._extract_raw(result["epsRevisions"])
         eps_revisions_keys = ["eps_revisions_" + idx for idx in eps_revisions.keys()]
         eps_revisions = dict(zip(eps_revisions_keys, eps_revisions.values()))
         formatted_results.update(eps_revisions)
 
-        eps_trend = await self._extract_raw(result["epsTrend"])
+        eps_trend = self._extract_raw(result["epsTrend"])
         eps_trend_keys = ["eps_trend_" + idx for idx in eps_trend.keys()]
         eps_trend = dict(zip(eps_trend_keys, eps_trend.values()))
         formatted_results.update(eps_trend)
 
         return formatted_results
 
-    async def format_earnings_trends(self):
+    def format_earnings_trends(self):
         key = ALL_MODULES["earningsTrend"]["key"]
         convert_dates = ALL_MODULES["earningsTrend"]["convert_dates"]
 
@@ -252,16 +275,14 @@ class QuoteSummary:
             if self._results_raw[symbol]["earnings_trend"] is not None:
                 result = []
                 for res in self._results_raw[symbol]["earnings_trend"][key]:
-                    result.append(await self._format_earnings_trends(res))
-                results[symbol] = await self._to_dataframe(
+                    result.append(self._format_earnings_trends(res))
+                results[symbol] = self._to_dataframe(
                     result, convert_dates=convert_dates
                 )
 
         self.results["earnings_trend"] = results
 
-    async def format_earning(self):
-        key = ALL_MODULES["earnings"]["key"]
-        convert_dates = ALL_MODULES["earningsTrend"]["convert_dates"]
+    def format_earning(self):
 
         results = dict()
         for symbol in self._results_raw:
@@ -270,7 +291,7 @@ class QuoteSummary:
 
                 results[symbol] = pd.DataFrame(
                     [
-                        await self._extract_raw(r)
+                        self._extract_raw(r)
                         for r in self._results_raw[symbol]["earnings"][
                             "financialsChart"
                         ]["yearly"]
@@ -281,7 +302,7 @@ class QuoteSummary:
                         results[symbol],
                         pd.DataFrame(
                             [
-                                await self._extract_raw(r)
+                                self._extract_raw(r)
                                 for r in self._results_raw[symbol]["earnings"][
                                     "financialsChart"
                                 ]["quarterly"]
@@ -290,384 +311,375 @@ class QuoteSummary:
                     ]
                 )
 
-        return results
+        self.results["earnings"] = results
 
-    async def format_results(self, module: str):
+    def format_results(self, module: str):
 
         module_ = snake_to_camel(module)
         key = ALL_MODULES[module_]["key"]
         convert_dates = ALL_MODULES[module_]["convert_dates"]
         convert = ALL_MODULES[module_]["convert"]
-        if module == "earnings_trend":
-            await self.format_earnings_trends()
-        if module == "earnings":
-            await self.format_earning()
+
+        # if module == "earnings_trend":
+        #    self.format_earnings_trends()
+
+        # if module == "earnings":
+        #    self.format_earning()
+
+        if convert == "df":
+            results = dict()
+            for symbol in self._results_raw:
+                if module in self._results_raw[symbol]:
+                    if self._results_raw[symbol][module] is not None:
+                        result = []
+                        for rr in (
+                            self._results_raw[symbol][module][key]
+                            if key is not None
+                            else self._results_raw[symbol][module]
+                        ):
+                            result.append(self._extract_raw(rr))
+
+                        results[symbol] = self._to_dataframe(
+                            result, convert_dates=convert_dates
+                        )
+
         else:
-            if convert == "df":
-                # results = {
-                #     symbol: await self._to_dataframe(
-                #         [
-                #             await self._extract_raw(rr)
-                #             for rr in (
-                #                 self._results_raw[symbol][module][key]
-                #                 if key is not None
-                #                 else self._results_raw[symbol][module]
-                #             )
-                #             if self._results_raw[symbol][module] is not None
-                #         ],
-                #         convert_dates=convert_dates,
-                #     )
-                #     for symbol in self._results_raw
-                # }
-                results = dict()
-                for symbol in self._results_raw:
-                    if module in self._results_raw[symbol]:
-                        if self._results_raw[symbol][module] is not None:
-                            result = []
-                            for rr in (
-                                self._results_raw[symbol][module][key]
+            results = dict()
+            for symbol in self._results_raw:
+                if module in self._results_raw[symbol]:
+                    if self._results_raw[symbol][module] is not None:
+                        results[symbol] = self._to_series(
+                            (
+                                self._extract_raw(
+                                    self._results_raw[symbol][module][key]
+                                )
                                 if key is not None
-                                else self._results_raw[symbol][module]
-                            ):
-                                result.append(await self._extract_raw(rr))
+                                else self._extract_raw(
+                                    self._results_raw[symbol][module]
+                                )
+                            ),
+                            convert_dates=convert_dates,
+                        )
 
-                            results[symbol] = await self._to_dataframe(
-                                result, convert_dates=convert_dates
-                            )
+        self.results[module] = results
 
-            else:
-                results = dict()
-                for symbol in self._results_raw:
-                    if module in self._results_raw[symbol]:
-                        if self._results_raw[symbol][module] is not None:
-                            results[symbol] = await self._to_series(
-                                await (
-                                    self._extract_raw(
-                                        self._results_raw[symbol][module][key]
-                                    )
-                                    if key is not None
-                                    else self._extract_raw(
-                                        self._results_raw[symbol][module]
-                                    )
-                                ),
-                                convert_dates=convert_dates,
-                            )
+    def _asset_profile(self, **kwargs):
+        module = "asset_profile"
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-                # results = {
-                #     symbol: await self._to_series(
-                #         await (
-                #             self._extract_raw(self._results_raw[symbol][module][key])
-                #             if key is not None
-                #             else self._extract_raw(self._results_raw[symbol][module])
-                #         ),
-                #         convert_dates=convert_dates,
-                #     )
-                #     for symbol in self._results_raw
-                # }
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
-            self.results[module] = results
+        return self.results[module]
 
-    async def _balance_sheet_history(
-        self, quarterly: bool = False, **kwargs
-    ) -> pd.DataFrame:
+    def _balance_sheet_history(self, quarterly: bool = False, **kwargs) -> pd.DataFrame:
         module = "balance_sheet_history"
         if quarterly:
             module += "_quarterly"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _calendar_events(self, **kwargs) -> pd.DataFrame:
+    def _calendar_events(self, **kwargs) -> pd.DataFrame:
         module = "calendar_events"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _cashflow_statement_history(
+    def _cashflow_statement_history(
         self, quarterly: bool = False, **kwargs
     ) -> pd.DataFrame:
         module = "cashflow_statement_history"
         if quarterly:
             module += "_quarterly"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _default_key_statistics(self, **kwargs) -> pd.DataFrame:
+    def _default_key_statistics(self, **kwargs) -> pd.DataFrame:
         module = "default_key_statistics"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _earnings(self, **kwargs) -> pd.DataFrame:
+    def _earnings(self, **kwargs) -> pd.DataFrame:
         module = "earnings"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_earnings()
 
         return self.results[module]
 
-    async def _earnings_history(self, **kwargs) -> pd.DataFrame:
+    def _earnings_history(self, **kwargs) -> pd.DataFrame:
         module = "earnings_history"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _earnings_trend(self, **kwargs) -> pd.DataFrame:
+    def _earnings_trend(self, **kwargs) -> pd.DataFrame:
         module = "earnings_trend"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_earnings_trends()
 
         return self.results[module]
 
-    async def _financial_data(self, **kwargs) -> pd.DataFrame:
+    def _financial_data(self, **kwargs) -> pd.DataFrame:
         module = "financial_data"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _fund_ownership(self, **kwargs) -> pd.DataFrame:
+    def _fund_ownership(self, **kwargs) -> pd.DataFrame:
         module = "fund_ownership"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _income_statement_history(
+    def _income_statement_history(
         self, quarterly: bool = False, **kwargs
     ) -> pd.DataFrame:
         module = "income_statement_history"
         if quarterly:
             module += "_quarterly"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _insider_transactions(self, **kwargs) -> pd.DataFrame:
+    def _insider_transactions(self, **kwargs) -> pd.DataFrame:
         module = "insider_transactions"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _insider_holders(self, **kwargs) -> pd.DataFrame:
+    def _insider_holders(self, **kwargs) -> pd.DataFrame:
         module = "insider_holders"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _institution_ownership(self, **kwargs) -> pd.DataFrame:
+    def _institution_ownership(self, **kwargs) -> pd.DataFrame:
         module = "institution_ownership"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _major_holders_breakdown(self, **kwargs) -> pd.DataFrame:
+    def _major_holders_breakdown(self, **kwargs) -> pd.DataFrame:
         module = "major_holders_breakdown"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _net_share_purchase_activity(self, **kwargs) -> pd.DataFrame:
+    def _net_share_purchase_activity(self, **kwargs) -> pd.DataFrame:
         module = "net_share_purchase_activity"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _price(self, **kwargs) -> pd.DataFrame:
+    def _price(self, **kwargs) -> pd.DataFrame:
         module = "price"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _quote_type(self, **kwargs) -> pd.DataFrame:
+    def _quote_type(self, **kwargs) -> pd.DataFrame:
         module = "quote_type"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _recommendation_trend(self, **kwargs) -> pd.DataFrame:
+    def _recommendation_trend(self, **kwargs) -> pd.DataFrame:
         module = "recommendation_trend"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _summary_detail(self, **kwargs) -> pd.DataFrame:
+    def _summary_detail(self, **kwargs) -> pd.DataFrame:
         module = "summary_detail"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
 
-    async def _summary_profile(self, **kwargs) -> pd.DataFrame:
+    def _summary_profile(self, **kwargs) -> pd.DataFrame:
         module = "summary_profile"
-        if not await self._module_already_fetched(module):
-            await self.fetch(modules=module, **kwargs)
+        if not self._module_already_fetched(module):
+            self.fetch(modules=module, **kwargs)
 
-        if not await self._module_already_formated(module):
-            await self.format_results(module=module)
+        if not self._module_already_formated(module):
+            self.format_results(module=module)
 
         return self.results[module]
+
+    @property
+    def asset_profile(self, **kwargs):
+        return self._asset_profile(**kwargs)
 
     @property
     def balance_sheet_history(self, **kwargs):
-        return asyncio.run(self._balance_sheet_history(quarterly=False, **kwargs))
+        return self._balance_sheet_history(quarterly=False, **kwargs)
 
     @property
     def balance_sheet_history_quarterly(self, **kwargs):
-        return asyncio.run(self._balance_sheet_history(quarterly=True, **kwargs))
+        return self._balance_sheet_history(quarterly=True, **kwargs)
 
     @property
     def calendar_events(self, **kwargs):
-        return asyncio.run(self._calendar_events(**kwargs))
+        return self._calendar_events(**kwargs)
 
     @property
     def cashflow_statement_history(self, **kwargs):
-        return asyncio.run(self._cashflow_statement_history(quarterly=False, **kwargs))
+        return self._cashflow_statement_history(quarterly=False, **kwargs)
 
     @property
     def cashflow_statement_history_quarterly(self, **kwargs):
-        return asyncio.run(self._cashflow_statement_history(quarterly=True, **kwargs))
+        return self._cashflow_statement_history(quarterly=True, **kwargs)
 
     @property
     def default_key_statistics(self, **kwargs):
-        return asyncio.run(self._default_key_statistics(**kwargs))
+        return self._default_key_statistics(**kwargs)
 
     @property
     def earnings(self, **kwargs):
-        return asyncio.run(self._earnings(**kwargs))
-    
+        return self._earnings(**kwargs)
+
     @property
     def earnings_history(self, **kwargs):
-        return asyncio.run(self._earnings_history(**kwargs))
+        return self._earnings_history(**kwargs)
 
     @property
     def earnings_trend(self, **kwargs):
-        return asyncio.run(self._earnings_trend(**kwargs))
+        return self._earnings_trend(**kwargs)
 
     @property
     def financial_data(self, **kwargs):
-        return asyncio.run(self._financial_data(**kwargs))
+        return self._financial_data(**kwargs)
 
     @property
     def fund_ownership(self, **kwargs):
-        return asyncio.run(self._fund_ownership(**kwargs))
+        return self._fund_ownership(**kwargs)
 
     @property
     def income_statement_history(self, **kwargs):
-        return asyncio.run(self._income_statement_history(quarterly=False, **kwargs))
+        return self._income_statement_history(quarterly=False, **kwargs)
 
     @property
     def income_statement_history_quarterly(self, **kwargs):
-        return asyncio.run(self._income_statement_history(quarterly=True, **kwargs))
+        return self._income_statement_history(quarterly=True, **kwargs)
 
     @property
     def insider_holders(self, **kwargs):
-        return asyncio.run(self._insider_holders(**kwargs))
+        return self._insider_holders(**kwargs)
 
     @property
     def insider_transactions(self, **kwargs):
-        return asyncio.run(self._insider_transactions(**kwargs))
+        return self._insider_transactions(**kwargs)
+
+    @property
+    def institution_ownership(self, **kwargs):
+        return self._institution_ownership(**kwargs)
 
     @property
     def major_holders_breakdown(self, **kwargs):
-        return asyncio.run(self._major_holders_breakdown(**kwargs))
+        return self._major_holders_breakdown(**kwargs)
 
     @property
     def net_share_purchase_activity(self, **kwargs):
-        return asyncio.run(self._net_share_purchase_activity(**kwargs))
+        return self._net_share_purchase_activity(**kwargs)
 
     @property
     def price(self, **kwargs):
-        return asyncio.run(self._price(**kwargs))
+        return self._price(**kwargs)
 
     @property
     def quote_type(self, **kwargs):
-        return asyncio.run(self._quote_type(**kwargs))
+        return self._quote_type(**kwargs)
 
     @property
     def recommendation_trend(self, **kwargs):
-        return asyncio.run(self._recommendation_trend(**kwargs))
+        return self._recommendation_trend(**kwargs)
 
     @property
     def summary_detail(self, **kwargs):
-        return asyncio.run(self._summary_detail(**kwargs))
+        return self._summary_detail(**kwargs)
 
     @property
     def summary_profile(self, **kwargs):
-        return asyncio.run(self._summary_profile(**kwargs))
+        return self._summary_profile(**kwargs)
 
-    # async def _parse_result(
+    # def _parse_result(
     #     self, result_raw: dict, _filter: str, convert: str, convert_dates: list
     # ) -> pd.Series | pd.DataFrame:
 
@@ -726,8 +738,8 @@ class QuoteSummary:
 
     #     return res
 
-    # async def _parse_earnings_history(self, earnings_history_raw) -> pd.Series:
-    #     earnings_history = await self._parse_result(
+    # def _parse_earnings_history(self, earnings_history_raw) -> pd.Series:
+    #     earnings_history = self._parse_result(
     #         earnings_history_raw, _filter="history", convert="df", convert_dates=[]
     #     )
     #     earnings_history = earnings_history.drop("quarter", axis=1)
@@ -748,7 +760,7 @@ class QuoteSummary:
     #     earnings_history.name = "earnings_history"
     #     return earnings_history
 
-    # async def _parse_earnings_trend(self, earnings_trend_raw) -> pd.Series:
+    # def _parse_earnings_trend(self, earnings_trend_raw) -> pd.Series:
     #     earnings_estimate = pd.Series()
     #     revenue_estimate = pd.Series()
     #     for _earnings_trend_raw in earnings_trend_raw["trend"]:
@@ -803,8 +815,8 @@ class QuoteSummary:
 
     #     return earnings_estimate, revenue_estimate
 
-    # async def _parse_insider_transactions(self, insider_transactions_raw):
-    #     # insider_transactions = await self._parse_result(
+    # def _parse_insider_transactions(self, insider_transactions_raw):
+    #     # insider_transactions = self._parse_result(
     #     #    insider_transactions_raw,
     #     #    _filter="transactions",
     #     #    convert="df",
@@ -825,7 +837,7 @@ class QuoteSummary:
 
     #     return insider_transactions_raw
 
-    # async def _parse_calendar_events(self, calendar_events_raw):
+    # def _parse_calendar_events(self, calendar_events_raw):
     #     calendar_events = pd.Series(calendar_events_raw["earnings"])
 
     #     if "earningsDate" in calendar_events:
@@ -841,7 +853,7 @@ class QuoteSummary:
     #     calendar_events.index = [camel_to_snake(idx) for idx in calendar_events.index]
     #     return calendar_events
 
-    # async def parse_results(self, key, results_raw: dict) -> dict:
+    # def parse_results(self, key, results_raw: dict) -> dict:
     #     symbols = key  # list(results_raw.keys(**kwargs)[0]
 
     #     results = {symbols: dict()}
@@ -859,22 +871,22 @@ class QuoteSummary:
     #                 if module == "earningsHistory":
     #                     results[symbols][
     #                         camel_to_snake(module)
-    #                     ] = await self._parse_earnings_history(result_raw)
+    #                     ] = self._parse_earnings_history(result_raw)
     #                 elif module == "earningsTrend":
     #                     (
     #                         earnings_estimates,
     #                         revenue_estimates,
-    #                     ) = await self._parse_earnings_trend(result_raw)
+    #                     ) = self._parse_earnings_trend(result_raw)
     #                     results[symbols]["earnings_estimates"] = earnings_estimates
     #                     results[symbols]["revenue_estimates"] = revenue_estimates
     #                 elif module == "calendarEvents":
     #                     results[symbols][
     #                         camel_to_snake(module)
-    #                     ] = await self._parse_calendar_events(result_raw)
+    #                     ] = self._parse_calendar_events(result_raw)
     #                 else:
     #                     results[symbols][
     #                         camel_to_snake(module)
-    #                     ] = await self._parse_result(
+    #                     ] = self._parse_result(
     #                         result_raw,
     #                         _filter=_filter,
     #                         convert=convert,
@@ -886,7 +898,7 @@ class QuoteSummary:
     #     return results
 
 
-# async def _fetch_quote_summary(
+# def _fetch_quote_summary(
 #     symbolss: str | int | list | None= None,
 #     exchanges: str | int | list | None= None,
 #     countries: str | list | None = None,
@@ -907,7 +919,7 @@ class QuoteSummary:
 
 #     self = QuoteSummary()
 
-#     async with aiohttp.ClientSession(connector=conn) as session:
+#     with aiohttp.ClientSession(connector=conn) as session:
 
 #         tasks = [
 #             asyncio.create_task(
@@ -925,7 +937,7 @@ class QuoteSummary:
 #         ]
 
 #         results = [
-#             await task
+#             task
 #             for task in progressbar.progressbar(
 #                 asyncio.as_completresult(tasks), max_value=len(symbolss)
 #             )
@@ -936,111 +948,89 @@ class QuoteSummary:
 #     return results
 
 
-def fetch_quote_summary(
-    symbolss: str | int | list | None = None,
-    exchanges: str | int | list | None = None,
-    countries: str | list | None = None,
-    modules: list = None,
-    *args,
-    **kwargs,
-) -> list:
-    if "use_proxy" in kwargs:
-        use_proxy = kwargs.pop("use_proxy")
-    else:
-        use_proxy = True
-    if init:
-        symbolss = symbolss
-    else:
-        symbolss = get_symbolss(
-            symbols_ids=symbolss, exchanges=exchanges, countries=countries, yahoo=True
-        )
-    self = QuoteSummary(symbols=symbolss, modules=modules)
-    return self(use_proxy=use_proxy, *args, **kwargs)
+# def fetch_quote_summary_basic(
+#     symbolss: str | int | list | None = None,
+#     exchanges: str | int | list | None = None,
+#     countries: str | list | None = None,
+#     *args,
+#     **kwargs,
+# ) -> pd.DataFrame:
+#     modules = [
+#         "summary_detail",
+#         "calendar_events",
+#         "default_key_statistics",
+#         "earnings_history",
+#         "earnings_trend",
+#         "financial_data",
+#         "major_holders_breakdown",
+#         "netSharePurchaseActivity",
+#         "quote_type",
+#         "summary_profile",
+#         "price",
+#     ]
 
+#     results = fetch_quote_summary(
+#         symbolss=symbolss,
+#         exchanges=exchanges,
+#         countries=countries,
+#         modules=modules,
+#         *args,
+#         **kwargs,
+#     )
 
-def fetch_quote_summary_basic(
-    symbolss: str | int | list | None = None,
-    exchanges: str | int | list | None = None,
-    countries: str | list | None = None,
-    *args,
-    **kwargs,
-) -> pd.DataFrame:
-    modules = [
-        "summary_detail",
-        "calendar_events",
-        "default_key_statistics",
-        "earnings_history",
-        "earnings_trend",
-        "financial_data",
-        "major_holders_breakdown",
-        "netSharePurchaseActivity",
-        "quote_type",
-        "summary_profile",
-        "price",
-    ]
+#     results = pd.concat(
+#         [pd.concat(results[k]).droplevel(0) for k in results],  # .drop_duplicates()
+#         keys=results.keys(),
+#         axis=0,
+#     )
+#     results = results[~results.index.duplicatresult()].unstack()
 
-    results = fetch_quote_summary(
-        symbolss=symbolss,
-        exchanges=exchanges,
-        countries=countries,
-        modules=modules,
-        *args,
-        **kwargs,
-    )
+#     results = results.reset_index(drop=True)
+#     results = results[[col for col in QUOTE_SUMMARY_COLUMNS if col in results.columns]]
 
-    results = pd.concat(
-        [pd.concat(results[k]).droplevel(0) for k in results],  # .drop_duplicates()
-        keys=results.keys(),
-        axis=0,
-    )
-    results = results[~results.index.duplicatresult()].unstack()
+#     # .drop(
+#     #     ["fax", "phone", "zip", "company_officers", "address1", "address2"], axis=1
+#     # )
+#     results = results.apply(pd.to_numeric, errors="ignore")
+#     percent_columns = [col for col in results.columns if "percent" in col]
+#     results[percent_columns] = results[percent_columns] * 100
+#     results["time"] = pd.Timestamp.now().date()
 
-    results = results.reset_index(drop=True)
-    results = results[[col for col in QUOTE_SUMMARY_COLUMNS if col in results.columns]]
+#     dtypes = {
+#         "short_name": str,
+#         "volume": float,
+#         "category": str,
+#         "fund_family": str,
+#         "legal_type": str,
+#         "fax": str,
+#         "phone": str,
+#         "zip": str,
+#         "address1": str,
+#         "adress2": str,
+#         "address3": str,
+#         "gmt_off_set_milliseconds": int,
+#     }
+#     results = results.astype(
+#         {col: dtypes[col] for col in dtypes if col in results.columns}
+#     )
+#     results = results.rename({"first_trade_date_epoch_utc": "ipo_date"}, axis=1)
 
-    # .drop(
-    #     ["fax", "phone", "zip", "company_officers", "address1", "address2"], axis=1
-    # )
-    results = results.apply(pd.to_numeric, errors="ignore")
-    percent_columns = [col for col in results.columns if "percent" in col]
-    results[percent_columns] = results[percent_columns] * 100
-    results["time"] = pd.Timestamp.now().date()
+#     for col in [
+#         "date_short_interest",
+#         "ex_dividend_date",
+#         "ipo_date",
+#         "last_dividend_date",
+#         "last_split_date",
+#         "last_fiscal_year_end",
+#         "earnings_date",
+#         "shares_short_previous_month_date",
+#         "next_fiscal_year_end",
+#         "most_recent_quarter",
+#     ]:
+#         if col in results.columns:
+#             results[col] = pd.to_datetime(results[col], unit="s")
 
-    dtypes = {
-        "short_name": str,
-        "volume": float,
-        "category": str,
-        "fund_family": str,
-        "legal_type": str,
-        "fax": str,
-        "phone": str,
-        "zip": str,
-        "address1": str,
-        "adress2": str,
-        "address3": str,
-        "gmt_off_set_milliseconds": int,
-    }
-    results = results.astype(
-        {col: dtypes[col] for col in dtypes if col in results.columns}
-    )
-    results = results.rename({"first_trade_date_epoch_utc": "ipo_date"}, axis=1)
-
-    for col in [
-        "date_short_interest",
-        "ex_dividend_date",
-        "ipo_date",
-        "last_dividend_date",
-        "last_split_date",
-        "last_fiscal_year_end",
-        "earnings_date",
-        "shares_short_previous_month_date",
-        "next_fiscal_year_end",
-        "most_recent_quarter",
-    ]:
-        if col in results.columns:
-            results[col] = pd.to_datetime(results[col], unit="s")
-
-    # results["time"] = results["time"].astype("datetime64[ns]")
-    results.drop_duplicates(subset=["symbols", "short_name", "industry", "sector"])
-    # results = results.rename({"index":"symbols"}, axis=1)
-    return results
+#     # results["time"] = results["time"].astype("datetime64[ns]")
+#     results.drop_duplicates(subset=["symbols", "short_name", "industry", "sector"])
+#     # results = results.rename({"index":"symbols"}, axis=1)
+#     return results

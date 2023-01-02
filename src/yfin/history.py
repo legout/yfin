@@ -1,6 +1,5 @@
-import asyncio
 import pandas as pd
-from async_requests import async_requests
+from parallel_requests import parallel_requests
 
 
 class History:
@@ -13,7 +12,7 @@ class History:
 
         self._symbols = symbols
 
-    async def fetch(
+    def fetch(
         self,
         period="ytd",
         interval="1d",
@@ -36,23 +35,24 @@ class History:
             includePrePost="true" if pre_post else "false",
         )
 
-        results = await async_requests(
+        results = parallel_requests(
             url=url,
             params=params,
             parse_func=self._parse_func,
             key=self._symbols,
-            return_type="json",
             *args,
             **kwargs
         )
 
-        results = pd.concat({k: results[k] for k in results if results[k] is not None})
+        results = pd.concat(
+            {k: results[k] for k in results if results[k] is not None}, names=["symbol"]
+        )
 
         results["time"] = results["time"].dt.tz_localize("UTC").dt.tz_convert(timezone)
 
         self.results = results
 
-    async def _parse_func(self, key, response):
+    def _parse_func(self, key, response):
         splits = pd.DataFrame(columns=["time", "splitRatio"])
         dividends = pd.DataFrame(columns=["time", "amount"])
         adjclose = pd.DataFrame(columns=["adjclose"])
@@ -92,7 +92,8 @@ class History:
 
         except:
             history = None
-        return {key: history}
+        return history
 
     def __call__(self, *args, **kwargs):
-        return asyncio.run(self.fetch(*args, **kwargs)).results
+        self.fetch(*args, **kwargs)
+        return self.results

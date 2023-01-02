@@ -1,7 +1,7 @@
-from .constants import URLS
-from async_requests import async_requests
 import pandas as pd
-import asyncio
+from parallel_requests import parallel_requests
+
+from .constants import URLS
 
 
 class Quotes:
@@ -44,7 +44,7 @@ class Quotes:
             symbols = [symbols]
         self._symbols = symbols
 
-    async def fetch(
+    def fetch(
         self,
         symbols: str | list | tuple = None,
         chunk_size: int = 1500,
@@ -61,7 +61,7 @@ class Quotes:
         )
         params = [dict(symbols=_symbols) for _symbols in self._symbol_chunks]
 
-        results = await async_requests(
+        results = parallel_requests(
             url=self._URL, params=params, parse_func=self._parse_raw, *args, **kwargs
         )
         if isinstance(results, list):
@@ -81,7 +81,7 @@ class Quotes:
         chunked_symbols = [cs for cs in chunked_symbols if len(cs) > 0]
         return chunked_symbols
 
-    async def _parse_raw(self, response: object) -> pd.DataFrame:
+    def _parse_raw(self, response: object) -> pd.DataFrame:
 
         df = pd.DataFrame(response["quoteResponse"]["result"])
 
@@ -94,4 +94,5 @@ class Quotes:
         return df.astype(dates)
 
     def __call__(self, *args, **kwargs):
-        return asyncio.run(self.fetch(*args, **kwargs)).results
+        self.fetch(*args, **kwargs)
+        return self.results

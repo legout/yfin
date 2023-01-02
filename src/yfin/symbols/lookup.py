@@ -1,10 +1,9 @@
-import asyncio
 from itertools import product
 from string import ascii_lowercase, digits
 
 import pandas as pd
 import pyarrow as pa
-from async_requests import async_requests
+from parallel_requests import parallel_requests
 
 from ..constants import COUNTRIES
 from ..utils.symbols import validate
@@ -13,7 +12,7 @@ from ..utils.symbols import validate
 class Lookup:
     _URL = "https://query1.finance.yahoo.com/v1/finance/lookup"
 
-    async def search(
+    def search(
         self,
         query: str | list,
         type_: str | list = "equity",
@@ -21,10 +20,9 @@ class Lookup:
         *args,
         **kwargs
     ) -> pd.DataFrame:
-        async def parse_func(key, response):
+        def parse_func(key, response):
             res = pa.Table.from_pylist(response["finance"]["result"][0]["documents"])
-            # res["query"] = key
-            #res = res.add_column(0, "lookup", [[key] * res.shape[0]])
+
             return res
 
         if isinstance(query, str):
@@ -46,7 +44,7 @@ class Lookup:
             for query_ in query
         ]
 
-        res = await async_requests(
+        res = parallel_requests(
             url=self._URL,
             params=params,
             key=query,
@@ -58,7 +56,7 @@ class Lookup:
             res = pa.concat_tables(res)
         return res
 
-    async def lookup(
+    def lookup(
         self,
         query_length: int = 2,
         type_: str | list = "equity",
@@ -74,12 +72,10 @@ class Lookup:
         queries = [
             "".join(q) for q in list(product(*[samples for n in range(query_length)]))
         ]
-        res = await self.search(
-            query=queries, type_=type_, country=country, *args, **kwargs
-        )
+        res = self.search(query=queries, type_=type_, country=country, *args, **kwargs)
 
         if isinstance(res, list):
-            res = pd.concat(res)
+            res = pa.concat_tables(res)
         return res
 
 
@@ -102,9 +98,7 @@ def lookup_search(
     """
 
     lu = Lookup()
-    return asyncio.run(
-        lu.search(query=query, type_=type_, country=country, *args, **kwargs)
-    )
+    return lu.search(query=query, type_=type_, country=country, *args, **kwargs)
 
 
 def lookup(
@@ -126,10 +120,8 @@ def lookup(
     """
 
     lu = Lookup()
-    return asyncio.run(
-        lu.lookup(
-            query_length=query_length, type_=type_, country=country, *args, **kwargs
-        )
+    return lu.lookup(
+        query_length=query_length, type_=type_, country=country, *args, **kwargs
     )
 
 

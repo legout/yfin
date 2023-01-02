@@ -1,4 +1,5 @@
 import pandas as pd
+import requests
 
 URLS = {
     "search": "https://query2.finance.yahoo.com/v1/finance/search",
@@ -10,13 +11,18 @@ URLS = {
     "lookup": "https://query1.finance.yahoo.com/v1/finance/lookup",
 }
 
-EXCHANGES = pd.read_html("https://help.yahoo.com/kb/SLN2310.html")[0]
+try:
+    EXCHANGES = pd.read_html(
+        requests.get("https://help.yahoo.com/kb/SLN2310.html").text
+    )[0]
+except:
+    pass
 
 ALL_MODULES = {
     # 'assetProfile',
     "assetProfile": {
         "key": None,
-        "convert":"s",
+        "convert": "s",
         "convert_dates": ["governanceEpochDate", "compensationAsOfEpochDate"],
     },
     "balanceSheetHistory": {
@@ -55,10 +61,10 @@ ALL_MODULES = {
             "fundInceptionDate",
             "lastSplitDate",
             "mostRecentQuarter",
-            "lastDividendDate"
+            "lastDividendDate",
         ],
     },
-    "earnings": {"key": None, "convert":"df", "convert_dates": ["earningsDate"]},
+    "earnings": {"key": None, "convert": "df", "convert_dates": ["earningsDate"]},
     "earningsHistory": {
         "key": "history",
         "convert": "df",
