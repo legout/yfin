@@ -26,7 +26,7 @@ def validate(symbol: str | list, max_symbols=1000, **kwargs):
     params = [{"symbols": ",".join(s)} for s in symbol_]
 
     res = pd.concat(
-        parallel_requests(url=url, params=params, parse_func=parse_json, **kwargs)
+        parallel_requests(urls=url, params=params, parse_func=parse_json, **kwargs)
     ).rename("valid")
     res.index.names = ["symbol"]
 

@@ -105,9 +105,9 @@ class QuoteSummary:
             }
 
             results = parallel_requests(
-                url=self._url,
+                urls=self._url,
                 params=params,
-                key=self.symbols,
+                keys=self.symbols,
                 parse_func=self._parse_raw if parse else None,
                 *args,
                 **kwargs,

@@ -2,7 +2,6 @@ import requests
 
 import pandas as pd
 import re
-import random
 
 
 def _camel_to_snake(name: str) -> str:
@@ -42,5 +41,3 @@ def convert_numbers(x):
     except:
         return x
 
-
-def 

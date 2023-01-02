@@ -62,7 +62,7 @@ class Quotes:
         params = [dict(symbols=_symbols) for _symbols in self._symbol_chunks]
 
         results = parallel_requests(
-            url=self._URL, params=params, parse_func=self._parse_raw, *args, **kwargs
+            urls=self._URL, params=params, parse_func=self._parse_raw, *args, **kwargs
         )
         if isinstance(results, list):
             results = pd.concat(

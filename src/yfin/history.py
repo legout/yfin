@@ -36,10 +36,10 @@ class History:
         )
 
         results = parallel_requests(
-            url=url,
+            urls=url,
             params=params,
             parse_func=self._parse_func,
-            key=self._symbols,
+            keys=self._symbols,
             *args,
             **kwargs
         )

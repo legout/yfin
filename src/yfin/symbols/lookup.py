@@ -45,9 +45,9 @@ class Lookup:
         ]
 
         res = parallel_requests(
-            url=self._URL,
+            urls=self._URL,
             params=params,
-            key=query,
+            keys=query,
             parse_func=parse_func,
             *args,
             **kwargs

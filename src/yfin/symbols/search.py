@@ -41,9 +41,9 @@ class Search:
         ]
 
         results = parallel_requests(
-            url=self._URL1,
+            urls=self._URL1,
             params=params,
-            key=self._query,
+            keys=self._query,
             headers=None,
             parse_func=self._parse_func1,
             method="GET",
@@ -60,11 +60,11 @@ class Search:
             "device": "console",
             "returnMeta": "true",
         }
-        url = [self._URL2 + query for query in self._query]
+        urls = [self._URL2 + query for query in self._query]
         results = parallel_requests(
-            url=url,
+            urls=url,
             params=params,
-            key=self._query,
+            keys=self._query,
             headers=None,
             parse_func=self._parse_func2,
             method="GET",
