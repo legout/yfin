@@ -62,7 +62,7 @@ class Search:
         }
         urls = [self._URL2 + query for query in self._query]
         results = parallel_requests(
-            urls=url,
+            urls=urls,
             params=params,
             keys=self._query,
             headers=None,
