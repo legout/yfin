@@ -1,19 +1,12 @@
 import datetime as dt
 import math
+
 import numpy as np
 import pandas as pd
 from parallel_requests import parallel_requests
 
 from .constants import ALL_MODULES, URLS
 from .utils.base import camel_to_snake, snake_to_camel
-
-# try:
-#     from findata import get_symbolss
-
-#     init = False
-# except Exception as e:
-#     print(e, "Initializing")
-#     init = True
 
 
 def _convert_date(date: int | list) -> dt.datetime | list:
@@ -32,8 +25,7 @@ def _convert_date(date: int | list) -> dt.datetime | list:
     elif isinstance(date, (int, float)):
         if not math.isnan(date):
             date = dt.datetime.utcfromtimestamp(int(date))
-    # else:
-    #    date = dt.datetime.utcfromtimestamp(int(date))
+
     return date
 
 
@@ -62,7 +54,23 @@ class QuoteSummary:
     def fetch(
         self, modules: str | list | None = None, parse: bool = True, *args, **kwargs
     ):
-        # self.symbols = symbols
+        def _parse(response: object) -> dict:
+            if response["quoteSummary"]["result"] is None:
+                result = None
+            else:
+                res = response["quoteSummary"]["result"][0]
+                # modules = list(res.keys())
+                for module in self._modules:
+                    if snake_to_camel(module) not in res:
+                        res[module] = None
+                    else:
+                        if module != snake_to_camel(module):
+                            res[module] = res[snake_to_camel(module)]
+                            res.pop(snake_to_camel(module))
+
+                result = res
+
+            return result
 
         self._url = [self._BASE_URL + symbols for symbols in self.symbols]
 
@@ -108,7 +116,7 @@ class QuoteSummary:
                 urls=self._url,
                 params=params,
                 keys=self.symbols,
-                parse_func=self._parse_raw if parse else None,
+                parse_func=_parse if parse else None,
                 *args,
                 **kwargs,
             )
@@ -122,12 +130,6 @@ class QuoteSummary:
             ]
             results = {symbol: results[symbol] for symbol in self._symbols}
 
-            # if len(results) > 1:
-
-            #     results = {
-            #         k: v for result in results for k, v in result.items() if len(v) > 0
-            #     }
-
             if hasattr(self, "_results_raw"):
                 for symbol in results:
                     if symbol in self._results_raw:
@@ -138,24 +140,6 @@ class QuoteSummary:
                 self._results_raw = results
         else:
             print("Nothing todo. Module already fetched or module unknown.")
-
-    def _parse_raw(self, key: str, response: object) -> dict:
-        if response["quoteSummary"]["result"] is None:
-            result = None
-        else:
-            res = response["quoteSummary"]["result"][0]
-            # modules = list(res.keys())
-            for module in self._modules:
-                if snake_to_camel(module) not in res:
-                    res[module] = None
-                else:
-                    if module != snake_to_camel(module):
-                        res[module] = res[snake_to_camel(module)]
-                        res.pop(snake_to_camel(module))
-
-            result = res
-
-        return result
 
     def _module_already_fetched(self, module: str) -> bool:
         if not hasattr(self, "_results_raw"):
@@ -198,7 +182,7 @@ class QuoteSummary:
                 else:
                     results_[k] = results[k]
 
-        return results_
+            return results_
 
         return results
 

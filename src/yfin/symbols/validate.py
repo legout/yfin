@@ -13,8 +13,8 @@ def validate(symbol: str | list, max_symbols=1000, **kwargs):
         max_symbols (int, optional): number if symbols included into one request. Defaults to 1000.
     """
 
-    async def parse_json(json):
-        return pd.Series(json["symbolsValidation"]["result"][0])
+    def _parse(response):
+        return pd.Series(response["symbolsValidation"]["result"][0]).rename("valid")
 
     if isinstance(symbol, str):
         symbol = [symbol]
@@ -25,9 +25,10 @@ def validate(symbol: str | list, max_symbols=1000, **kwargs):
     ]
     params = [{"symbols": ",".join(s)} for s in symbol_]
 
-    res = pd.concat(
-        parallel_requests(urls=url, params=params, parse_func=parse_json, **kwargs)
-    ).rename("valid")
-    res.index.names = ["symbol"]
+    results = parallel_requests(urls=url, params=params, parse_func=_parse)
+    if isinstance(results, list):
+        results = pd.concat(results).reset_index().rename({"index": "symbol"}, axis=1)
+    else:
+        results = results.reset_index().rename({"index": "symbol"}, axis=1)
 
-    return res
+    return results
