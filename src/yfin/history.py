@@ -1,10 +1,18 @@
-import pandas as pd
-from parallel_requests import parallel_requests
 import datetime as dt
+from zoneinfo import ZoneInfo
+
+import nest_asyncio
+import pandas as pd
+import polars as pl
+from parallel_requests import parallel_requests
+
 from .constants import URLS
+
+nest_asyncio.apply()
 
 
 class History:
+    """Yahoo Finance Hisorical OHCL Data."""
 
     _BASE_URL = URLS["chart"]
 
@@ -16,35 +24,38 @@ class History:
 
     def fetch(
         self,
-        start: str | dt.datetime | None = None,
-        end: str | dt.datetime | None = None,
-        period: str | None = None,  
-        interval: str = "1d",
+        start: str | dt.datetime | pd.Timestamp | None = None,
+        end: str | dt.datetime | pd.Timestamp | None = None,
+        period: str | None = None,
+        freq: str = "1d",
         splits: bool = True,
         dividends: bool = True,
-        pre_post: bool = True,
+        pre_post: bool = False,
         adjust: bool = False,
         timezone: str = "UTC",
         *args,
         **kwargs
     ) -> pd.DataFrame:
-        """_summary_
+        """Fetch historical ohcl data from yahoo finance.
 
         Args:
-            start (str | dt.datetime | None, optional): _description_. Defaults to None.
-            end (str | dt.datetime | None, optional): _description_. Defaults to None.
-            period (str | None, optional): _description_. Defaults to None.
-            interval (str, optional): _description_. Defaults to "1d".
-            splits (bool, optional): _description_. Defaults to True.
-            dividends (bool, optional): _description_. Defaults to True.
-            pre_post (bool, optional): _description_. Defaults to True.
-            adjust (bool, optional): _description_. Defaults to False.
-            timezone (str, optional): _description_. Defaults to "UTC".
+            start (str | dt.datetime | None, optional): Download start time. Defaults to None.
+            end (str | dt.datetime | None, optional): Download end time. Defaults to None.
+            period (str | None, optional): Download period. Defaults to None.
+                Either use period or start and end to define download period.
+                Valid options: 11d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
+            freq (str, optional): Download frequence. Defaults to "1d".
+                Valid options: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
+            splits (bool, optional): Include splilts into downloaded dataframe. Defaults to True.
+            dividends (bool, optional): Include dividends into downloaded dataframe. Defaults to True.
+            pre_post (bool, optional): Include data from pre and/or post market. Defaults to True.
+            adjust (bool, optional): Auto adjust ohcl data. Defaults to False.
+            timezone (str, optional): Timezone used for timestamp. Defaults to "UTC".
 
         Returns:
-            pd.DataFrame: _description_
+            pd.DataFrame: ohcl history.
         """
-        
+
         def _parse(response):
             splits = pd.DataFrame(columns=["time", "splitRatio"])
             dividends = pd.DataFrame(columns=["time", "amount"])
@@ -63,10 +74,20 @@ class History:
 
                 if "events" in res:
                     if "splits" in res["events"]:
+
+                        def splitratio_to_float(s):
+                            if isinstance(s, str):
+                                a, b = s.split(":")
+                                return int(a) / int(b)
+                            return s
+
                         splits = (
                             pd.DataFrame(res["events"]["splits"].values())
                             .astype({"date": "datetime64[s]"})
                             .rename({"date": "time"}, axis=1)[["time", "splitRatio"]]
+                        )
+                        splits["splitRatio"] = splits["splitRatio"].apply(
+                            lambda s: splitratio_to_float(s)
                         )
 
                     if "dividends" in res["events"]:
@@ -83,33 +104,72 @@ class History:
                     .fillna(0)
                 )
 
+                if adjust:
+
+                    history[["open", "high", "low", "close"]] = (
+                        history[["open", "high", "low", "close"]]
+                        * (history["adjclose"] / history["close"]).values[:, None]
+                    )
+                history["time"] = (
+                    history["time"].dt.tz_localize("UTC").dt.tz_convert(timezone)
+                )
+                if freq.lower() in ["1d", "5d", "1wk", "1mo", "3mo"]:
+                    history["time"] = history["time"].dt.date
+
             except:
                 history = None
             return history
 
         url = [self._BASE_URL + symbol for symbol in self._symbols]
 
+        # handle period depending on given period, start, end
         if not start and not period:
             period = "ytd"
 
         if start:
-            start = dt.datetime.fromisoformat(str).timestamp()
+            if isinstance(start, str):
+                start = (
+                    dt.datetime.fromisoformat(start)
+                    .replace(tzinfo=ZoneInfo(timezone))
+                    .timestamp()
+                )
+
+            elif isinstance(start, pd.Timestamp):
+                start = start.timestamp()
+            elif isinstance(start, dt.datetime):
+                start = start.replace(tzinfo=ZoneInfo(timezone)).timestamp()
+
             if not end:
                 end = dt.datetime.utcnow().timestamp()
-            params = dict(period1=start, period2=end)
+            else:
+                if isinstance(end, str):
+                    end = (
+                        dt.datetime.fromisoformat(end)
+                        .replace(tzinfo=ZoneInfo(timezone))
+                        .timestamp()
+                    )
+
+                elif isinstance(end, pd.Timestamp):
+                    end = end.timestamp()
+                elif isinstance(end, dt.datetime):
+                    end = end.replace(tzinfo=ZoneInfo(timezone)).timestamp()
+
+            params = dict(period1=int(start), period2=int(end))
 
         if period:
             params = dict(range=period)
 
+        # set params
         params.update(
             dict(
-                interval=interval,
+                interval=freq,
                 events=",".join(["div" * dividends, "split" * splits]),
                 close="adjusted" if adjust else "unadjusted",
                 includePrePost="true" if pre_post else "false",
             )
         )
 
+        # fetch results
         results = parallel_requests(
             urls=url,
             params=params,
@@ -119,15 +179,19 @@ class History:
             **kwargs
         )
 
-        if isinstance(results, list):
-            results = pd.concat(
-                {k: results[k] for k in results if results[k] is not None},
-                names=["symbol"],
-            )
+        # combine results
+        if isinstance(results, dict):
+            not_none_results = {
+                k: results[k] for k in results if results[k] is not None
+            }
+            if len(not_none_results) > 0:
 
-            results["time"] = (
-                results["time"].dt.tz_localize("UTC").dt.tz_convert(timezone)
-            )
+                results = pd.concat(
+                    {k: results[k] for k in results if results[k] is not None},
+                    names=["symbol"],
+                )
+            else:
+                results = None
 
         self.results = results
 
@@ -140,8 +204,8 @@ def history(
     symbols: str | list,
     start: str | dt.datetime | None = None,
     end: str | dt.datetime | None = None,
-    period: str|None = None,
-    interval: str = "1d",
+    period: str | None = None,
+    freq: str = "1d",
     splits: bool = True,
     dividends: bool = True,
     pre_post: bool = True,
@@ -150,30 +214,31 @@ def history(
     *args,
     **kwargs
 ) -> pd.DataFrame:
-    """Fetch historical ohcl data.
+    """Fetch historical ohcl data from yahoo finance.
 
     Args:
-        start (str | dt.datetime | None, optional): _description_. Defaults to None.
-        end (str | dt.datetime | None, optional): _description_. Defaults to None.
-        symbols (str | list): Symbols.
-        period (str, optional): History period. 
-            Valid options: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max. Defaults to "ytd".
-        interval (str, optional): Interval between timestamps.
-            Valid options: 1d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,maxDefaults to "1d".
-        splits (bool, optional): _description_. Defaults to True.
-        dividends (bool, optional): _description_. Defaults to True.
-        pre_post (bool, optional): _description_. Defaults to True.
-        adjust (bool, optional): Adjust . Defaults to False.
-        timezone (str, optional): Convert timestamps to given timezone. Defaults to "UTC".
+        start (str | dt.datetime | None, optional): Download start time. Defaults to None.
+        end (str | dt.datetime | None, optional): Download end time. Defaults to None.
+        period (str | None, optional): Download period. Defaults to None.
+            Either use period or start and end to define download period.
+            Valid options: 11d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
+        freq (str, optional): Download frequence. Defaults to "1d".
+            Valid options: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
+        splits (bool, optional): Include splilts into downloaded dataframe. Defaults to True.
+        dividends (bool, optional): Include dividends into downloaded dataframe. Defaults to True.
+        pre_post (bool, optional): Include data from pre and/or post market. Defaults to True.
+        adjust (bool, optional): Auto adjust ohcl data. Defaults to False.
+        timezone (str, optional): Timezone used for timestamp. Defaults to "UTC".
 
     Returns:
-        pd.DataFrame: History
-
+        pd.DataFrame: ohcl history.
     """
     h = History(symbols=symbols)
     h.fetch(
+        start=start,
+        end=end,
         period=period,
-        interval=interval,
+        freq=freq,
         splits=splits,
         dividends=dividends,
         pre_post=pre_post,
