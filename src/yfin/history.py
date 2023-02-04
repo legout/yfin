@@ -189,10 +189,11 @@ class History:
                 results = pd.concat(
                     {k: results[k] for k in results if results[k] is not None},
                     names=["symbol"],
-                )
+                ).reset_index().drop("level_1", axis=1)
             else:
                 results = None
 
+        
         self.results = results
 
     def __call__(self, *args, **kwargs):
