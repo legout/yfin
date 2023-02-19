@@ -1,14 +1,15 @@
+import asyncio
 import datetime as dt
 from zoneinfo import ZoneInfo
 
 import nest_asyncio
 import pandas as pd
 import polars as pl
-from parallel_requests import parallel_requests
+from parallel_requests import parallel_requests_async
 
 from .constants import URLS
 
-nest_asyncio.apply()
+# nest_asyncio.apply()
 
 
 class History:
@@ -22,7 +23,7 @@ class History:
 
         self._symbols = symbols
 
-    def fetch(
+    async def fetch(
         self,
         start: str | dt.datetime | pd.Timestamp | None = None,
         end: str | dt.datetime | pd.Timestamp | None = None,
@@ -170,7 +171,7 @@ class History:
         )
 
         # fetch results
-        results = parallel_requests(
+        results = await parallel_requests_async(
             urls=url,
             params=params,
             parse_func=_parse,
@@ -186,19 +187,72 @@ class History:
             }
             if len(not_none_results) > 0:
 
-                results = pd.concat(
-                    {k: results[k] for k in results if results[k] is not None},
-                    names=["symbol"],
-                ).reset_index().drop("level_1", axis=1)
+                results = (
+                    pd.concat(
+                        {k: results[k] for k in results if results[k] is not None},
+                        names=["symbol"],
+                    )
+                    .reset_index()
+                    .drop("level_1", axis=1)
+                )
             else:
                 results = None
 
-        
         self.results = results
 
     def __call__(self, *args, **kwargs):
-        self.fetch(*args, **kwargs)
+        asyncio.run(self.fetch(*args, **kwargs))
         return self.results
+
+
+async def history_async(
+    symbols: str | list,
+    start: str | dt.datetime | None = None,
+    end: str | dt.datetime | None = None,
+    period: str | None = None,
+    freq: str = "1d",
+    splits: bool = True,
+    dividends: bool = True,
+    pre_post: bool = True,
+    adjust: bool = False,
+    timezone: str = "UTC",
+    *args,
+    **kwargs
+) -> pd.DataFrame:
+    """Fetch historical ohcl data from yahoo finance.
+
+    Args:
+        start (str | dt.datetime | None, optional): Download start time. Defaults to None.
+        end (str | dt.datetime | None, optional): Download end time. Defaults to None.
+        period (str | None, optional): Download period. Defaults to None.
+            Either use period or start and end to define download period.
+            Valid options: 11d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
+        freq (str, optional): Download frequence. Defaults to "1d".
+            Valid options: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
+        splits (bool, optional): Include splilts into downloaded dataframe. Defaults to True.
+        dividends (bool, optional): Include dividends into downloaded dataframe. Defaults to True.
+        pre_post (bool, optional): Include data from pre and/or post market. Defaults to True.
+        adjust (bool, optional): Auto adjust ohcl data. Defaults to False.
+        timezone (str, optional): Timezone used for timestamp. Defaults to "UTC".
+
+    Returns:
+        pd.DataFrame: ohcl history.
+    """
+    h = History(symbols=symbols)
+    await h.fetch(
+        start=start,
+        end=end,
+        period=period,
+        freq=freq,
+        splits=splits,
+        dividends=dividends,
+        pre_post=pre_post,
+        adjust=adjust,
+        timezone=timezone,
+        *args,
+        **kwargs
+    )
+    return h.results
 
 
 def history(
@@ -234,18 +288,20 @@ def history(
     Returns:
         pd.DataFrame: ohcl history.
     """
-    h = History(symbols=symbols)
-    h.fetch(
-        start=start,
-        end=end,
-        period=period,
-        freq=freq,
-        splits=splits,
-        dividends=dividends,
-        pre_post=pre_post,
-        adjust=adjust,
-        timezone=timezone,
-        *args,
-        **kwargs
+
+    return asyncio.run(
+        history_async(
+            symbols=symbols,
+            start=start,
+            end=end,
+            period=period,
+            freq=freq,
+            splits=splits,
+            dividends=dividends,
+            pre_post=pre_post,
+            adjust=adjust,
+            timezone=timezone,
+            *args,
+            **kwargs
+        )
     )
-    return h.results

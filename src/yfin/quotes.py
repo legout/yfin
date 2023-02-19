@@ -1,6 +1,6 @@
 import pandas as pd
-from parallel_requests import parallel_requests
-
+from parallel_requests import parallel_requests_async
+import asyncio
 from .constants import URLS
 
 
@@ -44,7 +44,7 @@ class Quotes:
             symbols = [symbols]
         self._symbols = symbols
 
-    def fetch(
+    async def fetch(
         self,
         symbols: str | list | tuple = None,
         chunk_size: int = 1500,
@@ -96,7 +96,7 @@ class Quotes:
         )
         params = [dict(symbols=_symbols) for _symbols in self._symbol_chunks]
 
-        results = parallel_requests(
+        results = await parallel_requests_async(
             urls=self._URL, params=params, parse_func=_parse, *args, **kwargs
         )
         if isinstance(results, list):
@@ -108,11 +108,11 @@ class Quotes:
         self.results = results
 
     def __call__(self, *args, **kwargs):
-        self.fetch(*args, **kwargs)
+        asyncio.run(self.fetch(*args, **kwargs))
         return self.results
 
 
-def quotes(
+async def quotes_async(
     symbols: str | list, chunk_size: int = 1000, *args, **kwargs
 ) -> pd.DataFrame:
     """Fetch quotes for given symbols.
@@ -125,6 +125,20 @@ def quotes(
         pd.DataFrame: Quotes.
     """
     q = Quotes(symbols=symbols)
-    q.fetch(chunk_size=chunk_size, *args, **kwargs)
+    await q.fetch(chunk_size=chunk_size, *args, **kwargs)
 
     return q.results
+
+
+def quotes(symbols: str | list, chunk_size: int = 1000, *args, **kwargs
+) -> pd.DataFrame:
+    """Fetch quotes for given symbols.
+
+    Args:
+        symbols (str | list): Symbols.
+        chunk_size (int, optional): Chunk size of symbols for each request. Defaults to 1000.
+
+    Returns:
+        pd.DataFrame: Quotes.
+    """
+    return asyncio.run(quotes_async(symbols=symbols, chunk_size=chunk_size, **kwargs))

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "yfin"
-version = "0.1.7"
+version = "0.1.8"
 description = ""
 authors = ["Volker Lorrmann <volker.lorrmann@gmail.com>"]
 readme = "README.md"

@@ -3,7 +3,7 @@ import math
 
 import numpy as np
 import pandas as pd
-from parallel_requests import parallel_requests
+from parallel_requests import parallel_requests_async
 
 from .constants import ALL_MODULES, URLS
 from .utils.base import camel_to_snake, snake_to_camel
@@ -51,7 +51,7 @@ class QuoteSummary:
         self._symbols = symbols  # dict.fromkeys(self._modules, [])
         self.results = dict()
 
-    def fetch(
+    async def fetch(
         self, modules: str | list | None = None, parse: bool = True, *args, **kwargs
     ):
         def _parse(response: object) -> dict:
@@ -112,7 +112,7 @@ class QuoteSummary:
                 "corsDomain": "finance.yahoo.com",
             }
 
-            results = parallel_requests(
+            results = await parallel_requests_async(
                 urls=self._url,
                 params=params,
                 keys=self.symbols,
@@ -347,220 +347,220 @@ class QuoteSummary:
 
         self.results[module] = results
 
-    def _asset_profile(self, **kwargs):
+    async def _asset_profile(self, **kwargs):
         module = "asset_profile"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _balance_sheet_history(self, quarterly: bool = False, **kwargs) -> pd.DataFrame:
+    async def _balance_sheet_history(self, quarterly: bool = False, **kwargs) -> pd.DataFrame:
         module = "balance_sheet_history"
         if quarterly:
             module += "_quarterly"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _calendar_events(self, **kwargs) -> pd.DataFrame:
+    async def _calendar_events(self, **kwargs) -> pd.DataFrame:
         module = "calendar_events"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _cashflow_statement_history(
+    async def _cashflow_statement_history(
         self, quarterly: bool = False, **kwargs
     ) -> pd.DataFrame:
         module = "cashflow_statement_history"
         if quarterly:
             module += "_quarterly"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _default_key_statistics(self, **kwargs) -> pd.DataFrame:
+    async def _default_key_statistics(self, **kwargs) -> pd.DataFrame:
         module = "default_key_statistics"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _earnings(self, **kwargs) -> pd.DataFrame:
+    async def _earnings(self, **kwargs) -> pd.DataFrame:
         module = "earnings"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_earnings()
 
         return self.results[module]
 
-    def _earnings_history(self, **kwargs) -> pd.DataFrame:
+    async def _earnings_history(self, **kwargs) -> pd.DataFrame:
         module = "earnings_history"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _earnings_trend(self, **kwargs) -> pd.DataFrame:
+    async def _earnings_trend(self, **kwargs) -> pd.DataFrame:
         module = "earnings_trend"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_earnings_trends()
 
         return self.results[module]
 
-    def _financial_data(self, **kwargs) -> pd.DataFrame:
+    async def _financial_data(self, **kwargs) -> pd.DataFrame:
         module = "financial_data"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _fund_ownership(self, **kwargs) -> pd.DataFrame:
+    async def _fund_ownership(self, **kwargs) -> pd.DataFrame:
         module = "fund_ownership"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _income_statement_history(
+    async def _income_statement_history(
         self, quarterly: bool = False, **kwargs
     ) -> pd.DataFrame:
         module = "income_statement_history"
         if quarterly:
             module += "_quarterly"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _insider_transactions(self, **kwargs) -> pd.DataFrame:
+    async def _insider_transactions(self, **kwargs) -> pd.DataFrame:
         module = "insider_transactions"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _insider_holders(self, **kwargs) -> pd.DataFrame:
+    async def _insider_holders(self, **kwargs) -> pd.DataFrame:
         module = "insider_holders"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _institution_ownership(self, **kwargs) -> pd.DataFrame:
+    async def _institution_ownership(self, **kwargs) -> pd.DataFrame:
         module = "institution_ownership"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _major_holders_breakdown(self, **kwargs) -> pd.DataFrame:
+    async def _major_holders_breakdown(self, **kwargs) -> pd.DataFrame:
         module = "major_holders_breakdown"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _net_share_purchase_activity(self, **kwargs) -> pd.DataFrame:
+    async def _net_share_purchase_activity(self, **kwargs) -> pd.DataFrame:
         module = "net_share_purchase_activity"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _price(self, **kwargs) -> pd.DataFrame:
+    async def _price(self, **kwargs) -> pd.DataFrame:
         module = "price"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _quote_type(self, **kwargs) -> pd.DataFrame:
+    async def _quote_type(self, **kwargs) -> pd.DataFrame:
         module = "quote_type"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _recommendation_trend(self, **kwargs) -> pd.DataFrame:
+    async def _recommendation_trend(self, **kwargs) -> pd.DataFrame:
         module = "recommendation_trend"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _summary_detail(self, **kwargs) -> pd.DataFrame:
+    async def _summary_detail(self, **kwargs) -> pd.DataFrame:
         module = "summary_detail"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
 
         return self.results[module]
 
-    def _summary_profile(self, **kwargs) -> pd.DataFrame:
+    async def _summary_profile(self, **kwargs) -> pd.DataFrame:
         module = "summary_profile"
         if not self._module_already_fetched(module):
-            self.fetch(modules=module, **kwargs)
+            await self.fetch(modules=module, **kwargs)
 
         if not self._module_already_formated(module):
             self.format_results(module=module)
@@ -907,7 +907,7 @@ class QuoteSummary:
 
 #         tasks = [
 #             asyncio.create_task(
-#                 self.fetch(
+#                 await self.fetch(
 #                     symbols=symbols,
 #                     modules=modules,
 #                     session=session,

@@ -1,8 +1,9 @@
+import asyncio
 from itertools import product
 from string import ascii_lowercase, digits
 
 import pandas as pd
-from parallel_requests import parallel_requests
+from parallel_requests import parallel_requests_async
 
 from ..constants import COUNTRIES, URLS
 
@@ -10,7 +11,7 @@ from ..constants import COUNTRIES, URLS
 class Lookup:
     _URL = URLS["lookup"]
 
-    def search(
+    async def search(
         self,
         query: str | list,
         type_: str | list = "equity",
@@ -53,7 +54,7 @@ class Lookup:
             for query_ in query
         ]
 
-        results = parallel_requests(
+        results = await parallel_requests_async(
             urls=self._URL,
             params=params,
             # keys=query,
@@ -65,7 +66,7 @@ class Lookup:
             results = pd.concat(results)
         return results
 
-    def lookup(
+    async def lookup(
         self,
         query_length: int = 2,
         type_: str | list = "equity",
@@ -91,7 +92,7 @@ class Lookup:
         queries = [
             "".join(q) for q in list(product(*[samples for n in range(query_length)]))
         ]
-        results = self.search(
+        results = await self.search(
             query=queries, type_=type_, country=country, *args, **kwargs
         )
 
@@ -99,6 +100,27 @@ class Lookup:
         #    res = pa.concat_tables(res)
         return results
 
+
+async def lookup_search_async(
+    query: str | list,
+    type_: str | list = "equity",
+    country: str = "united states",
+    *args,
+    **kwargs
+) -> pd.DataFrame:
+    """Run query search for `all` queries with length `query_length`.
+
+    Args:
+        query_length (int, optional): Query length. Defaults to 2.
+        type_ (str | list, optional): Asset type. Defaults to "equity".
+        country (str, optional): Country. Defaults to "united states".
+
+    Returns:
+        pd.DataFrame: Search results.
+    """
+
+    lu = Lookup()
+    return await lu.search(query=query, type_=type_, country=country, *args, **kwargs)
 
 def lookup_search(
     query: str | list,
@@ -119,9 +141,32 @@ def lookup_search(
     """
 
     lu = Lookup()
-    return lu.search(query=query, type_=type_, country=country, *args, **kwargs)
+    return asyncio.run(lu.search(query=query, type_=type_, country=country, *args, **kwargs))
 
 
+async def lookup_async(
+    query_length: int,
+    type_: str | list,
+    country: str = "united states",
+    *args,
+    **kwargs
+) -> pd.DataFrame:
+    """Run query search for `all` queries with length `query_length`.
+
+    Args:
+        query_length (int, optional): Query length. Defaults to 2.
+        type_ (str | list, optional): Asset type. Defaults to "equity".
+        country (str, optional): Country. Defaults to "united states".
+
+    Returns:
+        pd.DataFrame: Search results.
+    """
+
+    lu = Lookup()
+    return await lu.lookup(
+        query_length=query_length, type_=type_, country=country, *args, **kwargs
+    )
+    
 def lookup(
     query_length: int,
     type_: str | list,
@@ -141,9 +186,9 @@ def lookup(
     """
 
     lu = Lookup()
-    return lu.lookup(
+    return asyncio.run(lu.lookup(
         query_length=query_length, type_=type_, country=country, *args, **kwargs
-    )
+    ))
 
 
 # def download(
