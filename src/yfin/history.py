@@ -2,14 +2,12 @@ import asyncio
 import datetime as dt
 from zoneinfo import ZoneInfo
 
-import nest_asyncio
 import pandas as pd
 import polars as pl
 from parallel_requests import parallel_requests_async
 
 from .constants import URLS
 
-# nest_asyncio.apply()
 
 
 class History:
