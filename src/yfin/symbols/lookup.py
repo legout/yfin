@@ -64,6 +64,29 @@ class Lookup:
         )
         if isinstance(results, list):
             results = pd.concat(results)
+
+        if results.shape[0] > 0:
+            renames = {
+                k: v
+                for k, v in {
+                    "shortName": "name",
+                    "quoteType": "type",
+                    "industryName": "industry",
+                }.items()
+                if k in results.columns
+            }
+
+            results = results.rename(renames, axis=1).drop_duplicates(
+                subset=["symbol", "name", "exchange"]
+            )
+
+            columns = [
+                col
+                for col in results.columns
+                if col in ["symbol", "name", "exchange", "industry", "type"]
+            ]
+            results = results[columns]
+
         return results
 
     async def lookup(
@@ -122,6 +145,7 @@ async def lookup_search_async(
     lu = Lookup()
     return await lu.search(query=query, type_=type_, country=country, *args, **kwargs)
 
+
 def lookup_search(
     query: str | list,
     type_: str | list = "equity",
@@ -141,7 +165,9 @@ def lookup_search(
     """
 
     lu = Lookup()
-    return asyncio.run(lu.search(query=query, type_=type_, country=country, *args, **kwargs))
+    return asyncio.run(
+        lu.search(query=query, type_=type_, country=country, *args, **kwargs)
+    )
 
 
 async def lookup_async(
@@ -166,7 +192,8 @@ async def lookup_async(
     return await lu.lookup(
         query_length=query_length, type_=type_, country=country, *args, **kwargs
     )
-    
+
+
 def lookup(
     query_length: int,
     type_: str | list,
@@ -186,9 +213,11 @@ def lookup(
     """
 
     lu = Lookup()
-    return asyncio.run(lu.lookup(
-        query_length=query_length, type_=type_, country=country, *args, **kwargs
-    ))
+    return asyncio.run(
+        lu.lookup(
+            query_length=query_length, type_=type_, country=country, *args, **kwargs
+        )
+    )
 
 
 # def download(

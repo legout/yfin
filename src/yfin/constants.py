@@ -11,12 +11,12 @@ URLS = {
     "lookup": "https://query1.finance.yahoo.com/v1/finance/lookup",
 }
 
-try:
-    EXCHANGES = pd.read_html(
-        requests.get("https://help.yahoo.com/kb/SLN2310.html").text
-    )[0]
-except:
-    pass
+# try:
+#     EXCHANGES = pd.read_html(
+#         requests.get("https://help.yahoo.com/kb/SLN2310.html").text
+#     )[0]
+# except:
+#     pass
 
 ALL_MODULES = {
     # 'assetProfile',
