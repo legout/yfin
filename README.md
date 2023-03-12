@@ -1,16 +1,22 @@
-# YAHOO Finance API
+# Yfin - A blazing fast python wrapper for the Yahoo Fincance API
 
-Simple python wrapper for the yahoo finance api. Heavily uses asyncronous request to speed up data downloads. Optional usage of a rotating proxy is possible.
+Simple python wrapper for the yahoo finance api. Heavily uses asyncronous requests to speed up data downloads. Optional usage of random proxies is possible.
+
+This python library currently has functions to download
+ - historical OHLCV data
+ - fundamental data
+ - quotes
+ - symbol search
 
 
 ## Installation
 ```
-pip install git+https://github.com/legout/yfin
+pip install git+https://github.com/legout/yfin.git
 ```
 
 ## Exapmples
 
-...
+#
 
 ### Use of a random proxy server.
 

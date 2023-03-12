@@ -294,7 +294,7 @@ test = ["hypothesis (>=5.5.3)", "pytest (>=6.0)", "pytest-xdist (>=1.31)"]
 
 [[package]]
 name = "parallel-requests"
-version = "0.1.6"
+version = "0.1.7"
 description = ""
 category = "main"
 optional = false
@@ -306,16 +306,17 @@ develop = false
 asyncer = "^0.0.2"
 asyncio = "^3.4.3"
 loguru = "^0.6.0"
-pandas = "^1.4.4"
-python-dotenv = "^0.21.0"
+numpy = "^1.24.2"
+pandas = "^1.5.3"
+python-dotenv = "^1.0.0"
 requests = "^2.28.1"
-tqdm = "^4.64.1"
+tqdm = "^4.65.0"
 
 [package.source]
 type = "git"
-url = "https://github.com/legout/parallel-requests"
+url = "https://github.com/legout/parallel-requests.git"
 reference = "HEAD"
-resolved_reference = "92e21cce7b15e32e3019474136de1d7ca205f831"
+resolved_reference = "9ba1cc690b29c7cb7707e90a7996dccda780aa5d"
 
 [[package]]
 name = "python-dateutil"
@@ -334,14 +335,14 @@ six = ">=1.5"
 
 [[package]]
 name = "python-dotenv"
-version = "0.21.1"
+version = "1.0.0"
 description = "Read key-value pairs from a .env file and set them as environment variables"
 category = "main"
 optional = false
-python-versions = ">=3.7"
+python-versions = ">=3.8"
 files = [
-    {file = "python-dotenv-0.21.1.tar.gz", hash = "sha256:1c93de8f636cde3ce377292818d0e440b6e45a82f215c3744979151fa8151c49"},
-    {file = "python_dotenv-0.21.1-py3-none-any.whl", hash = "sha256:41e12e0318bebc859fcc4d97d4db8d20ad21721a6aa5047dd59f090391cb549a"},
+    {file = "python-dotenv-1.0.0.tar.gz", hash = "sha256:a8df96034aae6d2d50a4ebe8216326c61c3eb64836776504fcca410e5937a3ba"},
+    {file = "python_dotenv-1.0.0-py3-none-any.whl", hash = "sha256:f5971a9226b701070a4bf2c38c89e5a3f0d64de8debda981d1db98583009122a"},
 ]
 
 [package.extras]
@@ -461,4 +462,4 @@ dev = ["black (>=19.3b0)", "pytest (>=4.6.2)"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "87e075abd98f694e5a0a75beb0c8035fccade309b8c320fc4c1b3c5200ad80ce"
+content-hash = "d686c87d1d92b6d7b567d3c94e37fe732224f4004f34591d78651c66eb051f68"
