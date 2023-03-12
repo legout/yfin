@@ -8,6 +8,9 @@ Simple python wrapper for the yahoo finance api. Heavily uses asyncronous reques
 pip install git+https://github.com/legout/yfin
 ```
 
+## Exapmples
+
+...
 
 ### Use of a random proxy server.
 
