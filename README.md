@@ -17,8 +17,9 @@ This python library currently has functions to download
 pip install git+https://github.com/legout/yfin.git
 ```
 
-## Exapmples
+## Usage
 
+[Example Notebook](examples/examples.ipynb)
 
 ```python
 import datetime as dt
