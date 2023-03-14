@@ -159,13 +159,13 @@ It is also possible to provide a list or `proxies` as a parameter in every yFin 
 from yfin import history
 from yfin.utils.proxy import get_free_proxy_list
 
+data = history("AAPL", random_proxy=True)
+
 proxies = ["http://proxy.one.com", "https://proxy.town.com"]
+# or get free proxies. Note: These proxies are not very reliable
+# proxies = get_free_proxy_list()
 
 data = history("AAPL", proxies=proxies)
-
-# or use free random proxies
-proxies = get_free_proxy_list()
-data = history("AAPL", random_proxy=True)
 ```
 
 ### Webshare.io proxies
@@ -189,11 +189,13 @@ WEBSHARE_PROXIES_URL="https://proxy.webshare.io/api/v2/proxy/list/download/abcde
 $ echo 'export WEBSHARE_PROXIES_URL="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/"' >> ~/.bashrc
 ```
 
+The last option is to set your `WEBSHARE_PROXIES_URL` within your python code. **Note** It is neccessary to do before importing any other yFin function.
 
+```python
+from yfin.utils.proxy import set_webshare_proxy_url
 
-
-
-
+set_webshare_proxy_url(url="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/")
+```
 
 
 
