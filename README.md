@@ -41,7 +41,7 @@ WEBSHARE_PROXIES_URL="https://proxy.webshare.io/api/v2/proxy/list/download/abcde
 
 *or write WEBSHARE_PROXIES_URL into your shell config file (e.g. ~/.bashrc)*
 ```
-$ echo 'export WEBSHARE_PROXIES_URL=WEBSHARE_PROXIES_URL="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/"' >> ~/.bashrc
+$ echo 'export WEBSHARE_PROXIES_URL="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/"' >> ~/.bashrc
 ```
 
 
