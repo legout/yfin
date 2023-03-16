@@ -108,7 +108,7 @@ class Search:
         ]
 
         results = []
-        for i, params_ in enumerate(params):
+        for i, params_ in tqdm(enumerate(params)):
             results_ = await parallel_requests_async(
                 urls=self._URL1,
                 params=params_,

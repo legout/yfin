@@ -3,11 +3,9 @@ import datetime as dt
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-import polars as pl
 from parallel_requests import parallel_requests_async
 
 from .constants import URLS
-
 
 
 class History:
