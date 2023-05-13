@@ -64,7 +64,6 @@ class Quotes:
         """
 
         def _parse(response: object) -> pd.DataFrame:
-
             df = pd.DataFrame(response["quoteResponse"]["result"])
 
             dates = dict.fromkeys(
@@ -132,7 +131,8 @@ async def quotes_async(
     return q.results
 
 
-def quotes(symbols: str | list, chunk_size: int = 1000, *args, **kwargs
+def quotes(
+    symbols: str | list, chunk_size: int = 1000, *args, **kwargs
 ) -> pd.DataFrame:
     """Fetch quotes for given symbols.
 

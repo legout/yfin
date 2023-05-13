@@ -2,7 +2,7 @@
 
 Yfin is yet another python wrapper for the Yahoo Finance API. 
 
-By using asyncronous coroutines the http requests, are performed in parallel und therefore downloading data is blazing fast. Additionally, to avoid yahoo finance rate limiting, you can use random proxies. 
+By using asyncronous coroutines the http requests are performed in parallel and downloading data is blazing fast. Additionally, to avoid yahoo finance rate limiting, you can use random proxies. 
  
 For every function an async version is available. e.g. for downloading hisorical data there is the function `history` and `history_async`. 
 

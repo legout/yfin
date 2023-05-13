@@ -21,8 +21,8 @@ class History:
 
     async def fetch(
         self,
-        start: str | dt.datetime | pd.Timestamp | None = None,
-        end: str | dt.datetime | pd.Timestamp | None = None,
+        start: str | dt.datetime | pd.Timestamp | int | float | None = None,
+        end: str | dt.datetime | pd.Timestamp | int | float | None = None,
         period: str | None = None,
         freq: str = "1d",
         splits: bool = True,
@@ -32,7 +32,7 @@ class History:
         timezone: str = "UTC",
         *args,
         **kwargs
-    ) -> pd.DataFrame:
+    ) -> pd.DataFrame | None:
         """Fetch historical ohcl data from yahoo finance.
 
         Args:
@@ -102,7 +102,6 @@ class History:
                 )
 
                 if adjust:
-
                     history[["open", "high", "low", "close"]] = (
                         history[["open", "high", "low", "close"]]
                         * (history["adjclose"] / history["close"]).values[:, None]
@@ -119,6 +118,7 @@ class History:
 
         url = [self._BASE_URL + symbol for symbol in self._symbols]
 
+        params = dict()
         # handle period depending on given period, start, end
         if not start and not period:
             period = "ytd"
@@ -182,7 +182,6 @@ class History:
                 k: results[k] for k in results if results[k] is not None
             }
             if len(not_none_results) > 0:
-
                 results = (
                     pd.concat(
                         {k: results[k] for k in results if results[k] is not None},

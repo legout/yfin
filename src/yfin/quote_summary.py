@@ -31,7 +31,6 @@ def _convert_date(date: int | list) -> dt.datetime | list:
 
 
 class QuoteSummary:
-
     _BASE_URL = URLS["quoteSummary"]
 
     def __init__(
@@ -217,7 +216,6 @@ class QuoteSummary:
         return results
 
     def __format_earnings_trends(self, result: dict):
-
         formatted_results = dict()
 
         formatted_results["period"] = result["period"]
@@ -268,7 +266,6 @@ class QuoteSummary:
         self.results["earnings_trend"] = results
 
     def _format_earning(self):
-
         results = dict()
         for symbol in self._results_raw:
             if self._results_raw[symbol]["earnings"] is not None:
@@ -299,7 +296,6 @@ class QuoteSummary:
         self.results["earnings"] = results
 
     def _format_results(self, module: str):
-
         module_ = snake_to_camel(module)
         key = ALL_MODULES[module_]["key"]
         convert_dates = ALL_MODULES[module_]["convert_dates"]
