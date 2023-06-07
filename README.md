@@ -193,9 +193,9 @@ $ echo 'export WEBSHARE_PROXIES_URL="https://proxy.webshare.io/api/v2/proxy/list
 The last option is to set your `WEBSHARE_PROXIES_URL` within your python code. **Note** It is neccessary to do before importing any other yFin function.
 
 ```python
-from yfin.utils.proxy import set_webshare_proxy_url
+from yfin.utils.proxy import set_webshare_proxies_url
 
-set_webshare_proxy_url(url="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/")
+set_webshare_proxies_url(url="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/")
 ```
 
 
