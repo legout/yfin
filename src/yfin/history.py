@@ -133,8 +133,15 @@ class History:
 
             elif isinstance(start, pd.Timestamp):
                 start = start.timestamp()
-            elif isinstance(start, dt.datetime|dt.date):
+            elif isinstance(start, dt.datetime):
                 start = start.replace(tzinfo=ZoneInfo(timezone)).timestamp()
+
+            elif isinstance(start, dt.date):
+                start = (
+                    dt.datetime.fromordinal(start.toordinal())
+                    .replace(tzinfo=ZoneInfo(timezone))
+                    .timestamp()
+                )
 
             if not end:
                 end = dt.datetime.utcnow().timestamp()
@@ -150,6 +157,12 @@ class History:
                     end = end.timestamp()
                 elif isinstance(end, dt.datetime):
                     end = end.replace(tzinfo=ZoneInfo(timezone)).timestamp()
+                elif isinstance(end, dt.date):
+                    end = (
+                        dt.datetime.fromordinal(end.toordinal())
+                        .replace(tzinfo=ZoneInfo(timezone))
+                        .timestamp()
+                    )
 
             params = dict(period1=int(start), period2=int(end))
 
