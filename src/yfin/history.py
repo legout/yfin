@@ -21,8 +21,8 @@ class History:
 
     async def fetch(
         self,
-        start: str | dt.datetime | pd.Timestamp | int | float | None = None,
-        end: str | dt.datetime | pd.Timestamp | int | float | None = None,
+        start: str | dt.datetime | dt.date | pd.Timestamp | int | float | None = None,
+        end: str | dt.datetime | dt.date | pd.Timestamp | int | float | None = None,
         period: str | None = None,
         freq: str = "1d",
         splits: bool = True,
@@ -109,16 +109,16 @@ class History:
                 history["time"] = (
                     history["time"].dt.tz_localize("UTC").dt.tz_convert(timezone)
                 )
-                if freq.lower() in ["1d", "5d", "1wk", "1mo", "3mo"]:
+                if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
                     history["time"] = history["time"].dt.date
 
-            except:
+            except Exception:
                 history = None
             return history
 
         url = [self._BASE_URL + symbol for symbol in self._symbols]
 
-        params = dict()
+        params = {}
         # handle period depending on given period, start, end
         if not start and not period:
             period = "ytd"
@@ -133,7 +133,7 @@ class History:
 
             elif isinstance(start, pd.Timestamp):
                 start = start.timestamp()
-            elif isinstance(start, dt.datetime):
+            elif isinstance(start, dt.datetime|dt.date):
                 start = start.replace(tzinfo=ZoneInfo(timezone)).timestamp()
 
             if not end:
@@ -181,7 +181,7 @@ class History:
             not_none_results = {
                 k: results[k] for k in results if results[k] is not None
             }
-            if len(not_none_results) > 0:
+            if not_none_results:
                 results = (
                     pd.concat(
                         {k: results[k] for k in results if results[k] is not None},
