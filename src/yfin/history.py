@@ -60,80 +60,80 @@ class History:
 
             res = response["chart"]["result"][0]
 
-            #try:
-            timestamp = (
-                pd.Series(res["timestamp"]).astype("datetime64[s]").rename("time")
-            )
-            ohlcv = pd.DataFrame(res["indicators"]["quote"][0])
-
-            if "adjclose" in res["indicators"]:
-                adjclose = pd.DataFrame(res["indicators"]["adjclose"][0])
-
-            if "events" in res:
-                if "splits" in res["events"]:
-
-                    def splitratio_to_float(s):
-                        if isinstance(s, str):
-                            a, b = s.split(":")
-                            return int(a) / int(b)
-                        return s
-
-                    splits = (
-                        pd.DataFrame(res["events"]["splits"].values())
-                        .astype({"date": "datetime64[s]"})
-                        .rename({"date": "time"}, axis=1)[["time", "splitRatio"]]
-                    )
-                    splits["splitRatio"] = splits["splitRatio"].apply(
-                        lambda s: splitratio_to_float(s)
-                    )
-
-                if "dividends" in res["events"]:
-                    dividends = (
-                        pd.DataFrame(res["events"]["dividends"].values())
-                        .astype({"date": "datetime64[s]"})
-                        .rename({"date": "time"}, axis=1)
-                    )
-
-            history = (
-                pd.concat([timestamp, ohlcv, adjclose], axis=1)
-                .merge(splits, on=["time"], how="left")
-                .merge(dividends, on=["time"], how="left")
-                .fillna(0)
-            )
-
-            if adjust:
-                history[["open", "high", "low", "close"]] = (
-                    history[["open", "high", "low", "close"]]
-                    * (history["adjclose"] / history["close"]).values[:, None]
+            try:
+                timestamp = (
+                    pd.Series(res["timestamp"]).astype("datetime64[s]").rename("time")
                 )
-            history["time"] = (
-                history["time"].dt.tz_localize("UTC").dt.tz_convert(timezone)
-            )
-            if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
-                history["time"] = history["time"].dt.date
+                ohlcv = pd.DataFrame(res["indicators"]["quote"][0])
 
-            
-            history = history.replace(
-                {"Infinity": "inf", "-Infinity": "-inf"}
-            )
-            dtypes = {k:v for k,v in {
-                    "symbol": str,
-                    "time": "datetime64[s]",
-                    "low": float,
-                    "high": float,
-                    "volume": int,
-                    "open": float,
-                    "close": float,
-                    "adjclose": float,
-                    "splitRatio": float,
-                    "amount": float,
-                }.items() if k in history.columns}
-            history = history.astype(
-                dtypes
-            )
+                if "adjclose" in res["indicators"]:
+                    adjclose = pd.DataFrame(res["indicators"]["adjclose"][0])
 
-            #except Exception:
-            #    history = None
+                if "events" in res:
+                    if "splits" in res["events"]:
+
+                        def splitratio_to_float(s):
+                            if isinstance(s, str):
+                                a, b = s.split(":")
+                                return int(a) / int(b)
+                            return s
+
+                        splits = (
+                            pd.DataFrame(res["events"]["splits"].values())
+                            .astype({"date": "datetime64[s]"})
+                            .rename({"date": "time"}, axis=1)[["time", "splitRatio"]]
+                        )
+                        splits["splitRatio"] = splits["splitRatio"].apply(
+                            lambda s: splitratio_to_float(s)
+                        )
+
+                    if "dividends" in res["events"]:
+                        dividends = (
+                            pd.DataFrame(res["events"]["dividends"].values())
+                            .astype({"date": "datetime64[s]"})
+                            .rename({"date": "time"}, axis=1)
+                        )
+
+                history = (
+                    pd.concat([timestamp, ohlcv, adjclose], axis=1)
+                    .merge(splits, on=["time"], how="left")
+                    .merge(dividends, on=["time"], how="left")
+                    .fillna(0)
+                )
+
+                if adjust:
+                    history[["open", "high", "low", "close"]] = (
+                        history[["open", "high", "low", "close"]]
+                        * (history["adjclose"] / history["close"]).values[:, None]
+                    )
+                history["time"] = (
+                    history["time"].dt.tz_localize("UTC").dt.tz_convert(timezone)
+                )
+                if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
+                    history["time"] = history["time"].dt.date
+
+                
+                history = history.replace(
+                    {"Infinity": "inf", "-Infinity": "-inf"}
+                )
+                dtypes = {k:v for k,v in {
+                        "symbol": str,
+                        "time": "datetime64[s]",
+                        "low": float,
+                        "high": float,
+                        "volume": int,
+                        "open": float,
+                        "close": float,
+                        "adjclose": float,
+                        "splitRatio": float,
+                        "amount": float,
+                    }.items() if k in history.columns}
+                history = history.astype(
+                    dtypes
+                )
+
+            except Exception:
+               history = None
             return history
 
         url = [self._BASE_URL + symbol for symbol in self._symbols]
@@ -224,9 +224,9 @@ class History:
                     .drop("level_1", axis=1)
                 )
                 # replace
-                result = result
+                
                 # dtypes
-                result = result[
+                results = results[
                     "symbol",
                     "time",
                     "open",
