@@ -235,8 +235,8 @@ class History:
                         "close",
                         "adjclose",
                         "volume",
-                        "amaount",
-                        "split",
+                        "amount",
+                        "splitRatio",
                     ]
                 ]
             else:
