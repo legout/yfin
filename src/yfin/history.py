@@ -112,6 +112,23 @@ class History:
                 if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
                     history["time"] = history["time"].dt.date
 
+                history = history.replace(
+                    {"Infinity": "inf", "-Infinity": "-inf"}
+                ).astype(
+                    {
+                        "symbol": str,
+                        "time": "datetime64[s]",
+                        "low": float,
+                        "high": float,
+                        "volume": int,
+                        "open": float,
+                        "close": float,
+                        "adjclose": float,
+                        "splitRatio": float,
+                        "amount": float,
+                    }
+                )
+
             except Exception:
                 history = None
             return history
@@ -203,6 +220,21 @@ class History:
                     .reset_index()
                     .drop("level_1", axis=1)
                 )
+                # replace
+                result = result
+                # dtypes
+                result = result[
+                    "symbol",
+                    "time",
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "adjclose",
+                    "volume",
+                    "amaount",
+                    "split",
+                ]
             else:
                 results = None
 
