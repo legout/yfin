@@ -112,11 +112,10 @@ class History:
                 if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
                     history["time"] = history["time"].dt.date
 
-                
-                history = history.replace(
-                    {"Infinity": "inf", "-Infinity": "-inf"}
-                )
-                dtypes = {k:v for k,v in {
+                history = history.replace({"Infinity": "inf", "-Infinity": "-inf"})
+                dtypes = {
+                    k: v
+                    for k, v in {
                         "symbol": str,
                         "time": "datetime64[s]",
                         "low": float,
@@ -127,13 +126,13 @@ class History:
                         "adjclose": float,
                         "splitRatio": float,
                         "amount": float,
-                    }.items() if k in history.columns}
-                history = history.astype(
-                    dtypes
-                )
+                    }.items()
+                    if k in history.columns
+                }
+                history = history.astype(dtypes)
 
             except Exception:
-               history = None
+                history = None
             return history
 
         url = [self._BASE_URL + symbol for symbol in self._symbols]
@@ -224,19 +223,21 @@ class History:
                     .drop("level_1", axis=1)
                 )
                 # replace
-                
+
                 # dtypes
                 results = results[
-                    "symbol",
-                    "time",
-                    "open",
-                    "high",
-                    "low",
-                    "close",
-                    "adjclose",
-                    "volume",
-                    "amaount",
-                    "split",
+                    [
+                        "symbol",
+                        "time",
+                        "open",
+                        "high",
+                        "low",
+                        "close",
+                        "adjclose",
+                        "volume",
+                        "amaount",
+                        "split",
+                    ]
                 ]
             else:
                 results = None
