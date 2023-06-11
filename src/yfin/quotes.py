@@ -4,7 +4,7 @@ import pandas as pd
 from parallel_requests import parallel_requests_async
 
 from .constants import URLS
-
+import requests
 
 class Quotes:
     _URL = URLS["quotes"]
@@ -45,6 +45,49 @@ class Quotes:
         if isinstance(symbols, str):
             symbols = [symbols]
         self._symbols = symbols
+        
+        self._cookies = self._get_yahoo_cookie()
+        self._crumb = self._get_yahoo_crumb(self._cookies)
+        
+
+    @staticmethod
+    def _get_yahoo_cookie(self):
+        cookie = None
+
+        user_agent_key = "User-Agent"
+        user_agent_value = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+
+        headers = {user_agent_key: user_agent_value}
+        response = requests.get(
+            "https://fc.yahoo.com", headers=headers, allow_redirects=True
+        )
+
+        if not response.cookies:
+            raise Exception("Failed to obtain Yahoo auth cookie.")
+
+        return list(response.cookies)[0]
+
+    @staticmethod
+    def _get_yahoo_crumb(self, cookie):
+        crumb = None
+
+        user_agent_key = "User-Agent"
+        user_agent_value = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+
+        headers = {user_agent_key: user_agent_value}
+
+        crumb_response = requests.get(
+            "https://query1.finance.yahoo.com/v1/test/getcrumb",
+            headers=headers,
+            cookies={cookie.name: cookie.value},
+            allow_redirects=True,
+        )
+        crumb = crumb_response.text
+
+        if crumb is None:
+            raise Exception("Failed to retrieve Yahoo crumb.")
+
+        return crumb
 
     async def fetch(
         self,
@@ -96,6 +139,7 @@ class Quotes:
             symbols=self._symbols, chunk_size=chunk_size
         )
         params = [dict(symbols=_symbols) for _symbols in self._symbol_chunks]
+        params["crumb"] = self._crumb
 
         results = await parallel_requests_async(
             urls=self._URL, params=params, parse_func=_parse, *args, **kwargs

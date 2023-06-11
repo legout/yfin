@@ -6,7 +6,7 @@ URLS = {
     "searchAssist": "https://finance.yahoo.com/_finance_doubledown/api/resource/searchassist;searchTerm=",
     "validation": "https://query2.finance.yahoo.com/v6/finance/quote/validate",
     "quoteSummary": "https://query2.finance.yahoo.com/v10/finance/quoteSummary/",
-    "quotes": "https://query2.finance.yahoo.com/v6/finance/quote",
+    "quotes": "https://query2.finance.yahoo.com/v7/finance/quote",
     "chart": "https://query2.finance.yahoo.com/v8/finance/chart/",
     "lookup": "https://query1.finance.yahoo.com/v1/finance/lookup",
 }
