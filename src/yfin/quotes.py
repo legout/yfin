@@ -51,7 +51,7 @@ class Quotes:
         
 
     @staticmethod
-    def _get_yahoo_cookie(self):
+    def _get_yahoo_cookie():
         cookie = None
 
         user_agent_key = "User-Agent"
@@ -68,7 +68,7 @@ class Quotes:
         return list(response.cookies)[0]
 
     @staticmethod
-    def _get_yahoo_crumb(self, cookie):
+    def _get_yahoo_crumb(cookie):
         crumb = None
 
         user_agent_key = "User-Agent"
