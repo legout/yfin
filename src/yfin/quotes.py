@@ -138,11 +138,11 @@ class Quotes:
         self._symbol_chunks = _chunk_symbols(
             symbols=self._symbols, chunk_size=chunk_size
         )
-        params = [dict(symbols=_symbols) for _symbols in self._symbol_chunks]
-        params["crumb"] = self._crumb
+        params = [dict(symbols=_symbols, crumb=self._crumb) for _symbols in self._symbol_chunks]
+        
 
         results = await parallel_requests_async(
-            urls=self._URL, params=params, parse_func=_parse, *args, **kwargs
+            urls=self._URL, params=params, parse_func=_parse, cookies={self._cookies.name:self._cookies.value}, *args, **kwargs
         )
         if isinstance(results, list):
             results = pd.concat(
