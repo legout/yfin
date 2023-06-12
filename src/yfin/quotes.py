@@ -40,7 +40,63 @@ class Quotes:
         "postMarketTime",
         "preMarketTime",
     ]
-
+    all_fields = ['ask',
+        'askSize',
+        'averageAnalystRating',
+        'averageDailyVolume10Day',
+        'averageDailyVolume3Month',
+        'bid',
+        'bidSize',
+        'bookValue',
+        'currency',
+        'displayName',
+        'dividendDate',
+        'dividendRate',
+        'dividendYield',
+        'earningsTimestamp',
+        'earningsTimestampEnd',
+        'earningsTimestampStart',
+        'epsCurrentYear',
+        'epsForward',
+        'epsTrailingTwelveMonths',
+        'fiftyDayAverage',
+        'fiftyDayAverageChange',
+        'fiftyDayAverageChangePercent',
+        'fiftyTwoWeekHigh',
+        'fiftyTwoWeekHighChange',
+        'fiftyTwoWeekHighChangePercent',
+        'fiftyTwoWeekLow',
+        'fiftyTwoWeekLowChange',
+        'fiftyTwoWeekLowChangePercent',
+        'fiftyTwoWeekRange',
+        'financialCurrency',
+        'forwardPE',
+        'longName',
+        'marketCap',
+        'messageBoardId',
+        'postMarketChange',
+        'postMarketChangePercent',
+        'postMarketPrice',
+        'postMarketTime',
+        'priceEpsCurrentYear',
+        'priceToBook',
+        'regularMarketChange',
+        'regularMarketChangePercent',
+        'regularMarketDayHigh',
+        'regularMarketDayLow',
+        'regularMarketDayRange',
+        'regularMarketOpen',
+        'regularMarketPreviousClose',
+        'regularMarketVolume',
+        'sharesOutstanding',
+        'shortName',
+        'trailingAnnualDividendRate',
+        'trailingAnnualDividendYield',
+        'trailingPE',
+        'twoHundredDayAverage',
+        'twoHundredDayAverageChange',
+        'twoHundredDayAverageChangePercent']
+    
     def __init__(self, symbols: str | list | tuple):
         if isinstance(symbols, str):
             symbols = [symbols]
@@ -93,6 +149,7 @@ class Quotes:
         self,
         symbols: str | list | tuple = None,
         chunk_size: int = 1500,
+        fields:list|None = None,
         *args,
         **kwargs
     ) -> pd.DataFrame:
@@ -138,7 +195,8 @@ class Quotes:
         self._symbol_chunks = _chunk_symbols(
             symbols=self._symbols, chunk_size=chunk_size
         )
-        params = [dict(symbols=_symbols, crumb=self._crumb) for _symbols in self._symbol_chunks]
+        fields = self.all_fields if fields is None else fields
+        params = [dict(symbols=_symbols, crumb=self._crumb, fields=",".join(fields)) for _symbols in self._symbol_chunks]
         
 
         results = await parallel_requests_async(
@@ -158,7 +216,7 @@ class Quotes:
 
 
 async def quotes_async(
-    symbols: str | list, chunk_size: int = 1000, *args, **kwargs
+    symbols: str | list, chunk_size: int = 1000, fields:list|None=None, *args, **kwargs
 ) -> pd.DataFrame:
     """Fetch quotes for given symbols.
 
@@ -170,13 +228,13 @@ async def quotes_async(
         pd.DataFrame: Quotes.
     """
     q = Quotes(symbols=symbols)
-    await q.fetch(chunk_size=chunk_size, *args, **kwargs)
+    await q.fetch(chunk_size=chunk_size, fields=fields, *args, **kwargs)
 
     return q.results
 
 
 def quotes(
-    symbols: str | list, chunk_size: int = 1000, *args, **kwargs
+    symbols: str | list, chunk_size: int = 1000, fields:list|None=None,*args, **kwargs
 ) -> pd.DataFrame:
     """Fetch quotes for given symbols.
 
@@ -187,4 +245,4 @@ def quotes(
     Returns:
         pd.DataFrame: Quotes.
     """
-    return asyncio.run(quotes_async(symbols=symbols, chunk_size=chunk_size, **kwargs))
+    return asyncio.run(quotes_async(symbols=symbols, chunk_size=chunk_size, fields=fields,**kwargs))
