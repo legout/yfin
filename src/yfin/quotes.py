@@ -5,6 +5,7 @@ from parallel_requests import parallel_requests_async
 
 from .constants import URLS
 import requests
+from .utils.base import camel_to_snake
 
 class Quotes:
     _URL = URLS["quotes"]
@@ -74,6 +75,10 @@ class Quotes:
         'longName',
         'marketCap',
         'messageBoardId',
+        'preMarketChange',
+        'preMarketChangePercent',
+        'preMarketPrice',
+        'preMarketTime',
         'postMarketChange',
         'postMarketChangePercent',
         'postMarketPrice',
@@ -207,7 +212,8 @@ class Quotes:
                 results,
                 ignore_index=True,
             )
-
+        results.columns = [camel_to_snake(col) for col in results.columns]
+        
         self.results = results
 
     def __call__(self, *args, **kwargs):
