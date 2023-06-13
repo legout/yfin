@@ -6,7 +6,7 @@ from parallel_requests import parallel_requests_async
 from ..constants import URLS
 
 
-async def validate_async(symbol: str | list, max_symbols=1000, **kwargs):
+async def validate_async(symbol: str | list, max_symbols=1000, *args, **kwargs):
     """Validation of give symbols. True means the given symbol is a valida
     symbol in the yahoo finance database.
 
@@ -27,7 +27,7 @@ async def validate_async(symbol: str | list, max_symbols=1000, **kwargs):
     ]
     params = [{"symbols": ",".join(s)} for s in symbol_]
 
-    results = await parallel_requests_async(urls=url, params=params, parse_func=_parse)
+    results = await parallel_requests_async(urls=url, params=params, parse_func=_parse, *args, **kwargs)
     if isinstance(results, list):
         results = pd.concat(results).reset_index().rename({"index": "symbol"}, axis=1)
     else:
@@ -36,7 +36,7 @@ async def validate_async(symbol: str | list, max_symbols=1000, **kwargs):
     return results
 
 
-def validate(symbol: str | list, max_symbols=1000, **kwargs):
+def validate(symbol: str | list, max_symbols=1000, *args, **kwargs):
     """Validation of give symbols. True means the given symbol is a valida
     symbol in the yahoo finance database.
 
@@ -45,4 +45,4 @@ def validate(symbol: str | list, max_symbols=1000, **kwargs):
         max_symbols (int, optional): number if symbols included into one request. Defaults to 1000.
     """
 
-    return asyncio.run(validate_async(symbol=symbol, max_symbols=max_symbols, **kwargs))
+    return asyncio.run(validate_async(symbol=symbol, max_symbols=max_symbols, *args, **kwargs))
