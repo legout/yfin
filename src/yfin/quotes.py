@@ -201,18 +201,25 @@ class Quotes:
             symbols=self._symbols, chunk_size=chunk_size
         )
         fields = self.all_fields if fields is None else fields
-        params = [dict(symbols=_symbols, crumb=self._crumb, fields=",".join(fields)) for _symbols in self._symbol_chunks]
         
-
-        results = await parallel_requests_async(
-            urls=self._URL, params=params, parse_func=_parse, cookies={self._cookies.name:self._cookies.value}, *args, **kwargs
-        )
+        
+        results = None
+        retries = 0
+        while results is None and retries<3:
+            params = [dict(symbols=_symbols, crumb=self._crumb, fields=",".join(fields)) for _symbols in self._symbol_chunks]
+            results = await parallel_requests_async(
+                urls=self._URL, params=params, parse_func=_parse, cookies={self._cookies.name:self._cookies.value}, *args, **kwargs
+            )
+            self._cookies = self._get_yahoo_cookie()
+            self._crumb = self._get_yahoo_crumb(self._cookies)
+            retries+=1
+            
         if isinstance(results, list):
             results = pd.concat(
                 results,
                 ignore_index=True,
             )
-        results.columns = [camel_to_snake(col) for col in results.columns]
+            results.columns = [camel_to_snake(col) for col in results.columns]
         
         self.results = results
 
