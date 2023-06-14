@@ -203,16 +203,12 @@ class Quotes:
         fields = self.all_fields if fields is None else fields
         
         
-        results = None
-        retries = 0
-        while results is None and retries<3:
-            params = [dict(symbols=_symbols, crumb=self._crumb, fields=",".join(fields)) for _symbols in self._symbol_chunks]
-            results = await parallel_requests_async(
-                urls=self._URL, params=params, parse_func=_parse, cookies={self._cookies.name:self._cookies.value}, *args, **kwargs
-            )
-            self._cookies = self._get_yahoo_cookie()
-            self._crumb = self._get_yahoo_crumb(self._cookies)
-            retries+=1
+        
+        params = [dict(symbols=_symbols, crumb=self._crumb, fields=",".join(fields)) for _symbols in self._symbol_chunks]
+        results = await parallel_requests_async(
+            urls=self._URL, params=params, parse_func=_parse, cookies={self._cookies.name:self._cookies.value}, *args, **kwargs
+        )
+            
             
         if isinstance(results, list):
             results = pd.concat(
