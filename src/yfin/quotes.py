@@ -219,6 +219,7 @@ class Quotes:
                 results,
                 ignore_index=True,
             )
+        if results is not None:
             results.columns = [camel_to_snake(col) for col in results.columns]
         
         self.results = results
