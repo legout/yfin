@@ -686,7 +686,7 @@ async def quote_summary_async(
             .drop("level_1", axis=1)
         )
 
-    elif "earnings_trend" in qs._modules:
+    if "earnings_trend" in qs._modules:
         qs._format_earnings_trends()
         qs._modules.remove("earnings_trend")
         results["earnings_trend"] = (
