@@ -671,30 +671,43 @@ class QuoteSummary:
         return asyncio.run(self.summary_profile_async(**kwargs))
 
 
-
-async def quote_summary_async(symbols:str|list[str], modules:str|list[str]|None=None, *args, **kwargs):
+async def quote_summary_async(
+    symbols: str | list[str], modules: str | list[str] | None = None, *args, **kwargs
+):
     qs = QuoteSummary(symbols=symbols, modules=modules)
     await qs.fetch(*args, **kwargs)
     results = {}
     if "earnings" in qs._modules:
         qs._format_earning()
         qs._modules.remove("earnings")
-        results["earnings"] = pd.concat(qs.results["earnings"], names=["symbol"]).reset_index().drop("level_1", axis=1)
-        
+        results["earnings"] = (
+            pd.concat(qs.results["earnings"], names=["symbol"])
+            .reset_index()
+            .drop("level_1", axis=1)
+        )
+
     elif "earnings_trend" in qs._modules:
         qs._format_earnings_trends()
         qs._modules.remove("earnings_trend")
-        results["earnings_trend"] = pd.concat(qs.results["earnings_trend"], names=["symbol"]).reset_index().drop("level_1", axis=1)
-        
+        results["earnings_trend"] = (
+            pd.concat(qs.results["earnings_trend"], names=["symbol"])
+            .reset_index()
+            .drop("level_1", axis=1)
+        )
+
     for module in qs._modules:
         qs._format_results(module=module)
         if isinstance(qs.results[module][qs._symbols[0]], pd.Series):
             if "symbol" not in res.columns:
-                res = pd.concat(qs["summary_profile"], names=["symbol"]).unstack().reset_index()
+                res = (
+                    pd.concat(qs.results[module], names=["symbol"])
+                    .unstack()
+                    .reset_index()
+                )
             else:
-                res = pd.concat(qs["summary_profile"]).unstack().reset_index(drop=True)
+                res = pd.concat(qs[module]).unstack().reset_index(drop=True)
         elif isinstance(qs.results[module][qs._symbols[0]], pd.DataFrame):
-            res = pd.concat(qs.results["earnings_trend"], names=["symbol"])
+            res = pd.concat(qs.results[module], names=["symbol"])
             if "symbol" not in res.columns:
                 res = res.reset_index().drop("level_1", axis=1)
             else:
@@ -704,8 +717,11 @@ async def quote_summary_async(symbols:str|list[str], modules:str|list[str]|None=
         results[module] = res
 
     return results
-        
 
 
-def quote_summary(symbols:str|list[str], modules:str|list[str]|None=None, *args, **kwargs):
-    return asyncio.run(quote_summary_async(symbols=symbols, modules=modules, *args, **kwargs))
+def quote_summary(
+    symbols: str | list[str], modules: str | list[str] | None = None, *args, **kwargs
+):
+    return asyncio.run(
+        quote_summary_async(symbols=symbols, modules=modules, *args, **kwargs)
+    )
