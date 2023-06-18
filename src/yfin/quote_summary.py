@@ -688,4 +688,4 @@ async def quote_summary_async(symbols:str|list[str], modules:str|list[str]|None=
 
 
 def quote_summary(symbols:str|list[str], modules:str|list[str]|None=None, *args, **kwargs):
-    return asyncio.run(quote_summary_async(symbols=symbols, modules=modules), *args, **kwargs)
+    return asyncio.run(quote_summary_async(symbols=symbols, modules=modules, *args, **kwargs))
