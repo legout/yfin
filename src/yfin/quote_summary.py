@@ -672,9 +672,9 @@ class QuoteSummary:
 
 
 
-async def quote_summary_async(symbols:str|list[str], modules:str|list[str]|None=None):
+async def quote_summary_async(symbols:str|list[str], modules:str|list[str]|None=None, *args, **kwargs):
     qs = QuoteSummary(symbols=symbols, modules=modules)
-    await qs.fetch()
+    await qs.fetch(*args, **kwargs)
     if "earnings" in qs._modules:
         qs._format_earning()
         qs._modules.remove("earnings")
@@ -687,5 +687,5 @@ async def quote_summary_async(symbols:str|list[str], modules:str|list[str]|None=
     return qs.results
 
 
-def quote_summary(symbols:str|list[str], modules:str|list[str]|None=None):
-    return asyncio.run(quote_summary_async(symbols=symbols, modules=modules))
+def quote_summary(symbols:str|list[str], modules:str|list[str]|None=None, *args, **kwargs):
+    return asyncio.run(quote_summary_async(symbols=symbols, modules=modules), *args, **kwargs)
