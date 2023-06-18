@@ -714,9 +714,9 @@ async def quote_summary_async(
             res = qs.results[module]
         results[module] = res
 
-    results["symbol"] = list(
-        set([results[module]["symbol"].drop_duplicates().to_list() for module in results])
-    )
+    #results["symbol"] = list(
+    #    set([results[module]["symbol"].drop_duplicates().to_list() for module in results])
+    #)
     return results
 
 
