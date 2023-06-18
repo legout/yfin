@@ -698,14 +698,12 @@ async def quote_summary_async(
     for module in qs._modules:
         qs._format_results(module=module)
         if isinstance(qs.results[module][qs._symbols[0]], pd.Series):
+            res = pd.concat(qs.results[module])
             if "symbol" not in res.columns:
-                res = (
-                    pd.concat(qs.results[module], names=["symbol"])
-                    .unstack()
-                    .reset_index()
-                )
+                res.index.names=["symbol"]
+                res = res.unstack().reset_index()
             else:
-                res = pd.concat(qs.results[module]).unstack().reset_index(drop=True)
+                res = res.unstack().reset_index(drop=True)
         elif isinstance(qs.results[module][qs._symbols[0]], pd.DataFrame):
             res = pd.concat(qs.results[module], names=["symbol"])
             if "symbol" not in res.columns:
