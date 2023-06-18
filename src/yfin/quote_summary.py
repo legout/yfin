@@ -669,3 +669,23 @@ class QuoteSummary:
     @property
     def summary_profile(self, **kwargs):
         return asyncio.run(self.summary_profile_async(**kwargs))
+
+
+
+async def quote_summary_async(symbols:str|list[str], modules:str|list[str]|None=None):
+    qs = QuoteSummary(symbols=symbols, modules=modules)
+    await qs.fetch()
+    if "earnings" in qs._modules:
+        qs._format_earning()
+        qs._modules.remove("earnings")
+    elif "earnings_trend" in qs._modules:
+        qs._format_earnings_trends()
+        qs._modules.remove("earnings_trends")
+    for module in qs._modules:
+        qs._format_results(module=module)
+        
+    return qs.results
+
+
+def quote_summary(symbols:str|list[str], modules:str|list[str]|None=None):
+    return asyncio.run(quote_summary_async(symbols=symbols, modules=modules))

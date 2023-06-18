@@ -30,7 +30,7 @@ async def validate_async(symbol: str | list, max_symbols=1000, *args, **kwargs):
     results = await parallel_requests_async(urls=url, params=params, parse_func=_parse, *args, **kwargs)
     if isinstance(results, list):
         results = pd.concat(results).reset_index().rename({"index": "symbol"}, axis=1)
-    else:
+    elif isinstance(results, pd.DataFrame):
         results = results.reset_index().rename({"index": "symbol"}, axis=1)
 
     return results
