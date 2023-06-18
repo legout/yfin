@@ -705,7 +705,7 @@ async def quote_summary_async(
                     .reset_index()
                 )
             else:
-                res = pd.concat(qs[module]).unstack().reset_index(drop=True)
+                res = pd.concat(qs.results[module]).unstack().reset_index(drop=True)
         elif isinstance(qs.results[module][qs._symbols[0]], pd.DataFrame):
             res = pd.concat(qs.results[module], names=["symbol"])
             if "symbol" not in res.columns:
