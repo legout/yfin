@@ -717,7 +717,7 @@ async def quote_summary_async(
                 res = qs.results[module]
             results[module] = res
         else:
-            results[module] = pd.DataFrame()
+            results[module] = pd.DataFrame(columns=["symbol"])
 
     results["symbol"] = list(
         set(
