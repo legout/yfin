@@ -1,31 +1,32 @@
 import asyncio
 
 import pandas as pd
+import requests
 from parallel_requests import parallel_requests_async
 
 from .constants import URLS
-import requests
 from .utils.base import camel_to_snake
+
 
 class Quotes:
     _URL = URLS["quotes"]
     _drop_columns = [
         "language",
         "region",
-        #"typeDisp",
+        # "typeDisp",
         "customPriceAlertConfidence",
         "triggerable",
-        #"longName",
+        # "longName",
         "quoteSourceName",
         "messageBoardId",
         "esgPopulated",
-        #"exchangeTimezoneShortName",
+        # "exchangeTimezoneShortName",
         "gmtOffSetMilliseconds",
         "sourceInterval",
         "tradeable",
         "priceHint",
         "fiftyTwoWeekRange",
-        #"underlyingSymbol",
+        # "underlyingSymbol",
         "openInterest",
     ]
     _date_columns = [
@@ -41,77 +42,78 @@ class Quotes:
         "postMarketTime",
         "preMarketTime",
     ]
-    all_fields = ['ask',
-        'askSize',
-        'averageAnalystRating',
-        'averageDailyVolume10Day',
-        'averageDailyVolume3Month',
-        'bid',
-        'bidSize',
-        'bookValue',
-        'currency',
-        'corporateActions',
-        'displayName',
-        'dividendDate',
-        'dividendRate',
-        'dividendYield',
-        'earningsTimestamp',
-        'earningsTimestampEnd',
-        'earningsTimestampStart',
-        'epsCurrentYear',
-        'epsForward',
-        'epsTrailingTwelveMonths',
-        'fiftyDayAverage',
-        'fiftyDayAverageChange',
-        'fiftyDayAverageChangePercent',
-        'fiftyTwoWeekHigh',
-        'fiftyTwoWeekHighChange',
-        'fiftyTwoWeekHighChangePercent',
-        'fiftyTwoWeekLow',
-        'fiftyTwoWeekLowChange',
-        'fiftyTwoWeekLowChangePercent',
-        'fiftyTwoWeekRange',
-        'financialCurrency',
-        'forwardPE',
-        'longName',
-        'marketCap',
-        'messageBoardId',
-        'preMarketChange',
-        'preMarketChangePercent',
-        'preMarketPrice',
-        'preMarketTime',
-        'postMarketChange',
-        'postMarketChangePercent',
-        'postMarketPrice',
-        'postMarketTime',
-        'priceEpsCurrentYear',
-        'priceToBook',
-        'quantity',
-        'regularMarketChange',
-        'regularMarketChangePercent',
-        'regularMarketDayHigh',
-        'regularMarketDayLow',
-        'regularMarketDayRange',
-        'regularMarketOpen',
-        'regularMarketPreviousClose',
-        'regularMarketVolume',
-        'sharesOutstanding',
-        'shortName',
-        'trailingAnnualDividendRate',
-        'trailingAnnualDividendYield',
-        'trailingPE',
-        'twoHundredDayAverage',
-        'twoHundredDayAverageChange',
-        'twoHundredDayAverageChangePercent']
-    
+    all_fields = [
+        "ask",
+        "askSize",
+        "averageAnalystRating",
+        "averageDailyVolume10Day",
+        "averageDailyVolume3Month",
+        "bid",
+        "bidSize",
+        "bookValue",
+        "currency",
+        "corporateActions",
+        "displayName",
+        "dividendDate",
+        "dividendRate",
+        "dividendYield",
+        "earningsTimestamp",
+        "earningsTimestampEnd",
+        "earningsTimestampStart",
+        "epsCurrentYear",
+        "epsForward",
+        "epsTrailingTwelveMonths",
+        "fiftyDayAverage",
+        "fiftyDayAverageChange",
+        "fiftyDayAverageChangePercent",
+        "fiftyTwoWeekHigh",
+        "fiftyTwoWeekHighChange",
+        "fiftyTwoWeekHighChangePercent",
+        "fiftyTwoWeekLow",
+        "fiftyTwoWeekLowChange",
+        "fiftyTwoWeekLowChangePercent",
+        "fiftyTwoWeekRange",
+        "financialCurrency",
+        "forwardPE",
+        "longName",
+        "marketCap",
+        "messageBoardId",
+        "preMarketChange",
+        "preMarketChangePercent",
+        "preMarketPrice",
+        "preMarketTime",
+        "postMarketChange",
+        "postMarketChangePercent",
+        "postMarketPrice",
+        "postMarketTime",
+        "priceEpsCurrentYear",
+        "priceToBook",
+        "quantity",
+        "regularMarketChange",
+        "regularMarketChangePercent",
+        "regularMarketDayHigh",
+        "regularMarketDayLow",
+        "regularMarketDayRange",
+        "regularMarketOpen",
+        "regularMarketPreviousClose",
+        "regularMarketVolume",
+        "sharesOutstanding",
+        "shortName",
+        "trailingAnnualDividendRate",
+        "trailingAnnualDividendYield",
+        "trailingPE",
+        "twoHundredDayAverage",
+        "twoHundredDayAverageChange",
+        "twoHundredDayAverageChangePercent",
+    ]
+
     def __init__(self, symbols: str | list | tuple):
         if isinstance(symbols, str):
             symbols = [symbols]
         self._symbols = symbols
-        
+
         self._cookies = self._get_yahoo_cookie()
         self._crumb = self._get_yahoo_crumb(self._cookies)
-        
 
     @staticmethod
     def _get_yahoo_cookie():
@@ -156,9 +158,9 @@ class Quotes:
         self,
         symbols: str | list | tuple = None,
         chunk_size: int = 1500,
-        fields:list|None = None,
+        fields: list | None = None,
         *args,
-        **kwargs
+        **kwargs,
     ) -> pd.DataFrame:
         """Fetch quotes for given symbols.
 
@@ -203,15 +205,21 @@ class Quotes:
             symbols=self._symbols, chunk_size=chunk_size
         )
         fields = self.all_fields if fields is None else fields
-        
-        
-        
-        params = [dict(symbols=_symbols, crumb=self._crumb, fields=",".join(fields)) for _symbols in self._symbol_chunks]
+
+        params = [
+            dict(symbols=_symbols, crumb=self._crumb, fields=",".join(fields))
+            for _symbols in self._symbol_chunks
+        ]
         results = await parallel_requests_async(
-            urls=self._URL, params=params, parse_func=_parse, cookies={self._cookies.name:self._cookies.value}, *args, **kwargs
+            urls=self._URL,
+            params=params,
+            parse_func=_parse,
+            cookies={self._cookies.name: self._cookies.value},
+            return_type="json",
+            *args,
+            **kwargs,
         )
-            
-            
+
         if isinstance(results, list):
             results = pd.concat(
                 results,
@@ -219,7 +227,7 @@ class Quotes:
             )
         if results is not None:
             results.columns = [camel_to_snake(col) for col in results.columns]
-        
+
         self.results = results
 
     def __call__(self, *args, **kwargs):
@@ -228,7 +236,11 @@ class Quotes:
 
 
 async def quotes_async(
-    symbols: str | list, chunk_size: int = 1000, fields:list|None=None, *args, **kwargs
+    symbols: str | list,
+    chunk_size: int = 1000,
+    fields: list | None = None,
+    *args,
+    **kwargs,
 ) -> pd.DataFrame:
     """Fetch quotes for given symbols.
 
@@ -246,7 +258,11 @@ async def quotes_async(
 
 
 def quotes(
-    symbols: str | list, chunk_size: int = 1000, fields:list|None=None,*args, **kwargs
+    symbols: str | list,
+    chunk_size: int = 1000,
+    fields: list | None = None,
+    *args,
+    **kwargs,
 ) -> pd.DataFrame:
     """Fetch quotes for given symbols.
 
@@ -257,4 +273,6 @@ def quotes(
     Returns:
         pd.DataFrame: Quotes.
     """
-    return asyncio.run(quotes_async(symbols=symbols, chunk_size=chunk_size, fields=fields,**kwargs))
+    return asyncio.run(
+        quotes_async(symbols=symbols, chunk_size=chunk_size, fields=fields, **kwargs)
+    )

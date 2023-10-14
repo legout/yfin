@@ -1,7 +1,7 @@
-import requests
+import re
 
 import pandas as pd
-import re
+import requests
 
 
 def _camel_to_snake(name: str) -> str:

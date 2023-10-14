@@ -16,6 +16,30 @@ parallel-requests = { git = "https://github.com/legout/parallel-requests.git" }
 tqdm = "^4.65.0"
 
 
+
+[tool.pdm.build]
+includes = [
+    "src/yfin",
+]
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+[project]
+authors = [
+    {name = "Volker Lorrmann", email = "volker.lorrmann@gmail.com"},
+]
+requires-python = ">=3.10,<4.0"
+dependencies = [
+    "pandas>=2.1.0",
+    "numpy<2.0.0,>=1.24.2",
+    "requests<3.0.0,>=2.28.1",
+    "lxml<5.0.0,>=4.9.1",
+    "parallel-requests @ git+https://github.com/legout/parallel-requests.git",
+    "tqdm<5.0.0,>=4.65.0",
+    "pandas<3.0.0,>=2.0.0",
+]
+name = "yfin"
+version = "0.2.2"
+description = ""
+readme = "README.md"

@@ -27,7 +27,9 @@ async def validate_async(symbol: str | list, max_symbols=1000, *args, **kwargs):
     ]
     params = [{"symbols": ",".join(s)} for s in symbol_]
 
-    results = await parallel_requests_async(urls=url, params=params, parse_func=_parse, *args, **kwargs)
+    results = await parallel_requests_async(
+        urls=url, params=params, parse_func=_parse, return_type="json", *args, **kwargs
+    )
     if isinstance(results, list):
         results = pd.concat(results).reset_index().rename({"index": "symbol"}, axis=1)
     elif isinstance(results, pd.Series):
@@ -45,4 +47,6 @@ def validate(symbol: str | list, max_symbols=1000, *args, **kwargs):
         max_symbols (int, optional): number if symbols included into one request. Defaults to 1000.
     """
 
-    return asyncio.run(validate_async(symbol=symbol, max_symbols=max_symbols, *args, **kwargs))
+    return asyncio.run(
+        validate_async(symbol=symbol, max_symbols=max_symbols, *args, **kwargs)
+    )

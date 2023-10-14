@@ -31,7 +31,7 @@ class History:
         adjust: bool = False,
         timezone: str = "UTC",
         *args,
-        **kwargs
+        **kwargs,
     ) -> pd.DataFrame | None:
         """Fetch historical ohcl data from yahoo finance.
 
@@ -204,8 +204,9 @@ class History:
             params=params,
             parse_func=_parse,
             keys=self._symbols,
+            return_type="json",
             *args,
-            **kwargs
+            **kwargs,
         )
 
         # combine results
@@ -261,7 +262,7 @@ async def history_async(
     adjust: bool = False,
     timezone: str = "UTC",
     *args,
-    **kwargs
+    **kwargs,
 ) -> pd.DataFrame:
     """Fetch historical ohcl data from yahoo finance.
 
@@ -294,7 +295,7 @@ async def history_async(
         adjust=adjust,
         timezone=timezone,
         *args,
-        **kwargs
+        **kwargs,
     )
     return h.results
 
@@ -311,7 +312,7 @@ def history(
     adjust: bool = False,
     timezone: str = "UTC",
     *args,
-    **kwargs
+    **kwargs,
 ) -> pd.DataFrame:
     """Fetch historical ohcl data from yahoo finance.
 
@@ -346,6 +347,6 @@ def history(
             adjust=adjust,
             timezone=timezone,
             *args,
-            **kwargs
+            **kwargs,
         )
     )

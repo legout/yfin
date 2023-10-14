@@ -116,8 +116,9 @@ class Search:
                 headers=None,
                 parse_func=_parse,
                 method="GET",
+                return_type="json",
                 *args,
-                **kwargs
+                **kwargs,
             )
 
             if isinstance(results_, dict):
@@ -176,8 +177,9 @@ class Search:
                 headers=None,
                 parse_func=_parse,
                 method="GET",
+                return_type="json",
                 *args,
-                **kwargs
+                **kwargs,
             )
 
             if isinstance(results_, dict):
@@ -209,7 +211,7 @@ async def search_async(
     quotes_count: int = 10,
     news_count: int = -1,
     *args,
-    **kwargs
+    **kwargs,
 ) -> pd.DataFrame:
     """Symbol search yahoo finance for assests.
 
@@ -228,7 +230,7 @@ async def search_async(
             quotes_count=quotes_count,
             news_count=news_count,
             *args,
-            **kwargs
+            **kwargs,
         )
     else:
         return await s.fetch(search_assist=2, *args, **kwargs)
@@ -241,7 +243,7 @@ def search(
     quotes_count: int = 10,
     news_count: int = -1,
     *args,
-    **kwargs
+    **kwargs,
 ) -> pd.DataFrame:
     """Symbol search yahoo finance for assests.
 
@@ -260,7 +262,7 @@ def search(
             quotes_count=quotes_count,
             news_count=news_count,
             *args,
-            **kwargs
+            **kwargs,
         )
     else:
         return s(search_assist=2, *args, **kwargs)

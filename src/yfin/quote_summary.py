@@ -117,6 +117,7 @@ class QuoteSummary:
                 params=params,
                 keys=self.symbols,
                 parse_func=_parse if parse else None,
+                return_type="json",
                 *args,
                 **kwargs,
             )
@@ -698,21 +699,25 @@ async def quote_summary_async(
     for module in qs._modules:
         qs._format_results(module=module)
         if len(qs.results[module]):
-            if isinstance(qs.results[module][list(qs.results[module].keys())[0]], pd.Series):
+            if isinstance(
+                qs.results[module][list(qs.results[module].keys())[0]], pd.Series
+            ):
                 res = pd.concat(qs.results[module])
                 if "symbol" not in res.index.levels[1]:
                     res.index.names = ["symbol", None]
                     res = res.unstack().reset_index()
                 else:
                     res = res.unstack().reset_index(drop=True)
-                    
-            elif isinstance(qs.results[module][list(qs.results[module].keys())[0]], pd.DataFrame):
+
+            elif isinstance(
+                qs.results[module][list(qs.results[module].keys())[0]], pd.DataFrame
+            ):
                 res = pd.concat(qs.results[module], names=["symbol"])
                 if "symbol" not in res.columns:
                     res = res.reset_index().drop("level_1", axis=1)
                 else:
                     res = res.reset_index(drop=True)
-                    
+
             else:
                 res = qs.results[module]
             results[module] = res

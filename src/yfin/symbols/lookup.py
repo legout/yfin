@@ -17,7 +17,7 @@ class Lookup:
         type_: str | list = "equity",
         country: str = "united states",
         *args,
-        **kwargs
+        **kwargs,
     ) -> pd.DataFrame:
         """Run query search on "https://query1.finance.yahoo.com/v1/finance/lookup"
 
@@ -59,8 +59,9 @@ class Lookup:
             params=params,
             # keys=query,
             parse_func=_parse,
+            return_type="json",
             *args,
-            **kwargs
+            **kwargs,
         )
         if isinstance(results, list):
             results = pd.concat(results)
@@ -95,7 +96,7 @@ class Lookup:
         type_: str | list = "equity",
         country: str = "united states",
         *args,
-        **kwargs
+        **kwargs,
     ) -> pd.DataFrame:
         """Run query search for `all` queries with length `query_length`.
 
@@ -129,7 +130,7 @@ async def lookup_search_async(
     type_: str | list = "equity",
     country: str = "united states",
     *args,
-    **kwargs
+    **kwargs,
 ) -> pd.DataFrame:
     """Run query search for `all` queries with length `query_length`.
 
@@ -151,7 +152,7 @@ def lookup_search(
     type_: str | list = "equity",
     country: str = "united states",
     *args,
-    **kwargs
+    **kwargs,
 ) -> pd.DataFrame:
     """Run query search for `all` queries with length `query_length`.
 
@@ -175,7 +176,7 @@ async def lookup_async(
     type_: str | list,
     country: str = "united states",
     *args,
-    **kwargs
+    **kwargs,
 ) -> pd.DataFrame:
     """Run query search for `all` queries with length `query_length`.
 
@@ -199,7 +200,7 @@ def lookup(
     type_: str | list,
     country: str = "united states",
     *args,
-    **kwargs
+    **kwargs,
 ) -> pd.DataFrame:
     """Run query search for `all` queries with length `query_length`.
 
