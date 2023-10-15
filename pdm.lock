@@ -260,7 +260,7 @@ name = "parallel-requests"
 version = "0.2.2"
 requires_python = ">=3.10,<4.0"
 git = "https://github.com/legout/parallel-requests.git"
-revision = "b7094a834312aa3cba9555be8ccd775985dd5fc9"
+revision = "1d4f0cb57fc911bf67220b484108061d7ccc13b9"
 summary = ""
 dependencies = [
     "asyncer<1.0.0,>=0.0.2",

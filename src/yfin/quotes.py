@@ -1,12 +1,13 @@
 import asyncio
+from arrow import get
 
 import pandas as pd
 import requests
 from parallel_requests import parallel_requests_async
 
 from .constants import URLS
-from .utils.base import camel_to_snake
-
+from .utils.base import camel_to_snake, get_yahoo_cookie, get_yahoo_crumb
+from http.cookiejar import Cookie
 
 class Quotes:
     _URL = URLS["quotes"]
@@ -107,52 +108,58 @@ class Quotes:
         "twoHundredDayAverageChangePercent",
     ]
 
-    def __init__(self, symbols: str | list | tuple):
+    def __init__(self, symbols: str | list | tuple, cookie: Cookie | None = None, crumb:str|None = None ):
         if isinstance(symbols, str):
             symbols = [symbols]
         self._symbols = symbols
-
-        self._cookies = self._get_yahoo_cookie()
-        self._crumb = self._get_yahoo_crumb(self._cookies)
-
-    @staticmethod
-    def _get_yahoo_cookie():
-        cookie = None
-
-        user_agent_key = "User-Agent"
-        user_agent_value = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-
-        headers = {user_agent_key: user_agent_value}
-        response = requests.get(
-            "https://fc.yahoo.com", headers=headers, allow_redirects=True
-        )
-
-        if not response.cookies:
-            raise Exception("Failed to obtain Yahoo auth cookie.")
-
-        return list(response.cookies)[0]
-
-    @staticmethod
-    def _get_yahoo_crumb(cookie):
-        crumb = None
-
-        user_agent_key = "User-Agent"
-        user_agent_value = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
-
-        headers = {user_agent_key: user_agent_value}
-
-        crumb_response = requests.get(
-            "https://query1.finance.yahoo.com/v1/test/getcrumb",
-            headers=headers,
-            cookies={cookie.name: cookie.value},
-            allow_redirects=True,
-        )
-        crumb = crumb_response.text
-
+        if cookie is None:
+            self._cookie = get_yahoo_cookie()
+        else:
+            self._cookie = cookie
         if crumb is None:
-            raise Exception("Failed to retrieve Yahoo crumb.")
+            self._crumb = get_yahoo_crumb(self._cookie)
+        else:
+            self._crumb = crumb
+       
 
-        return crumb
+    # @staticmethod
+    # def _get_yahoo_cookie():
+    #     cookie = None
+
+    #     user_agent_key = "User-Agent"
+    #     user_agent_value = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+
+    #     headers = {user_agent_key: user_agent_value}
+    #     response = requests.get(
+    #         "https://fc.yahoo.com", headers=headers, allow_redirects=True
+    #     )
+
+    #     if not response.cookies:
+    #         raise Exception("Failed to obtain Yahoo auth cookie.")
+
+    #     return list(response.cookies)[0]
+
+    # @staticmethod
+    # def _get_yahoo_crumb(cookie):
+    #     crumb = None
+
+    #     user_agent_key = "User-Agent"
+    #     user_agent_value = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
+
+    #     headers = {user_agent_key: user_agent_value}
+
+    #     crumb_response = requests.get(
+    #         "https://query1.finance.yahoo.com/v1/test/getcrumb",
+    #         headers=headers,
+    #         cookies={cookie.name: cookie.value},
+    #         allow_redirects=True,
+    #     )
+    #     crumb = crumb_response.text
+
+    #     if crumb is None:
+    #         raise Exception("Failed to retrieve Yahoo crumb.")
+
+    #     return crumb
 
     async def fetch(
         self,
@@ -214,7 +221,7 @@ class Quotes:
             urls=self._URL,
             params=params,
             parse_func=_parse,
-            cookies={self._cookies.name: self._cookies.value},
+            cookies={self._cookie.name: self._cookie.value},
             return_type="json",
             *args,
             **kwargs,
@@ -239,6 +246,8 @@ async def quotes_async(
     symbols: str | list,
     chunk_size: int = 1000,
     fields: list | None = None,
+    cookie: Cookie | None = None,
+    crumb: str | None = None,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
@@ -251,7 +260,7 @@ async def quotes_async(
     Returns:
         pd.DataFrame: Quotes.
     """
-    q = Quotes(symbols=symbols)
+    q = Quotes(symbols=symbols, cookie=cookie, crumb=crumb)
     await q.fetch(chunk_size=chunk_size, fields=fields, *args, **kwargs)
 
     return q.results
@@ -261,6 +270,8 @@ def quotes(
     symbols: str | list,
     chunk_size: int = 1000,
     fields: list | None = None,
+    cookie: Cookie | None = None,
+    crumb: str | None = None,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
@@ -274,5 +285,5 @@ def quotes(
         pd.DataFrame: Quotes.
     """
     return asyncio.run(
-        quotes_async(symbols=symbols, chunk_size=chunk_size, fields=fields, **kwargs)
+        quotes_async(symbols=symbols, chunk_size=chunk_size, cookie=cookie, crumb=crumb, fields=fields, *args, **kwargs)
     )

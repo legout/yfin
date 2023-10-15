@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "yfin"
-version = "0.2.2"
+version = "0.2.3"
 description = ""
 authors = ["Volker Lorrmann <volker.lorrmann@gmail.com>"]
 readme = "README.md"
@@ -40,6 +40,6 @@ dependencies = [
     "pandas<3.0.0,>=2.0.0",
 ]
 name = "yfin"
-version = "0.2.2"
+version = "0.2.3"
 description = ""
 readme = "README.md"
