@@ -5,7 +5,7 @@
 groups = ["default"]
 strategy = ["cross_platform"]
 lock_version = "4.4"
-content_hash = "sha256:e7e3be134c3d967f1954789cf4094ad7022769a6f55a62ab2a3629eb70454558"
+content_hash = "sha256:64f60856e50b4b4e509c09a995cdb710fd962f08a3ade67df8d33781101abde3"
 
 [[package]]
 name = "anyio"
@@ -223,7 +223,7 @@ files = [
 name = "parallel-requests"
 version = "0.2.3"
 requires_python = ">=3.10,<3.13"
-git = "https://github.com/legout/parallel-requests.git"
+git = "https://github.com/legout/parallel-requests"
 revision = "60f549bc3ea48d54f99ad5df15b4ba887c10615e"
 summary = ""
 dependencies = [
