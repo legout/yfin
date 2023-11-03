@@ -42,3 +42,8 @@ name = "yfin"
 version = "0.2.4"
 description = ""
 readme = "README.md"
+
+[project.optional-dependencies]
+dev = [
+    "ipython>=8.17.2",
+]
