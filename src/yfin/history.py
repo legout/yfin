@@ -1,7 +1,8 @@
 import asyncio
+from time import time
+from .utils.datetime import to_timestamp, datetime_from_string
 import datetime as dt
-from zoneinfo import ZoneInfo
-
+import pendulum as pdl
 import pandas as pd
 from parallel_requests import parallel_requests_async
 
@@ -21,8 +22,24 @@ class History:
 
     async def fetch(
         self,
-        start: str | dt.datetime | dt.date | pd.Timestamp | int | float | None = None,
-        end: str | dt.datetime | dt.date | pd.Timestamp | int | float | None = None,
+        start: str
+        | dt.datetime
+        | dt.date
+        | pd.Timestamp
+        | pdl.Date
+        | pdl.DateTime
+        | int
+        | float
+        | None = None,
+        end: str
+        | dt.datetime
+        | dt.date
+        | pd.Timestamp
+        | pdl.Date
+        | pdl.DateTime
+        | int
+        | float
+        | None = None,
         period: str | None = None,
         freq: str = "1d",
         splits: bool = True,
@@ -57,13 +74,11 @@ class History:
             splits = pd.DataFrame(columns=["time", "splitRatio"])
             dividends = pd.DataFrame(columns=["time", "amount"])
             adjclose = pd.DataFrame(columns=["adjclose"])
+            if "chart" in response:
+                res = response["chart"]["result"][0]
 
-            res = response["chart"]["result"][0]
+                timestamp =pd.Series(res["timestamp"]).apply(pd.to_datetime, unit="s", utc=True).rename("time")
 
-            try:
-                timestamp = (
-                    pd.Series(res["timestamp"]).astype("datetime64[s]").rename("time")
-                )
                 ohlcv = pd.DataFrame(res["indicators"]["quote"][0])
 
                 if "adjclose" in res["indicators"]:
@@ -86,6 +101,7 @@ class History:
                         splits["splitRatio"] = splits["splitRatio"].apply(
                             lambda s: splitratio_to_float(s)
                         )
+                        splits["time"] =splits["time"].dt.tz_localize("UTC")
 
                     if "dividends" in res["events"]:
                         dividends = (
@@ -93,6 +109,7 @@ class History:
                             .astype({"date": "datetime64[s]"})
                             .rename({"date": "time"}, axis=1)
                         )
+                        dividends["time"] =dividends["time"].dt.tz_localize("UTC")
 
                 history = (
                     pd.concat([timestamp, ohlcv, adjclose], axis=1)
@@ -106,9 +123,10 @@ class History:
                         history[["open", "high", "low", "close"]]
                         * (history["adjclose"] / history["close"]).values[:, None]
                     )
-                history["time"] = (
-                    history["time"].dt.tz_localize("UTC").dt.tz_convert(timezone)
-                )
+                if timezone != "UTC":
+                    history["time"] = (
+                        history["time"].dt.tz_convert(timezone)
+                    )
                 if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
                     history["time"] = history["time"].dt.date
 
@@ -117,7 +135,7 @@ class History:
                     k: v
                     for k, v in {
                         "symbol": str,
-                        "time": "datetime64[s]",
+                        #"time": "datetime64[s]",
                         "low": float,
                         "high": float,
                         "volume": int,
@@ -131,11 +149,11 @@ class History:
                 }
                 history = history.astype(dtypes)
 
-            except Exception:
+            else:
                 history = None
             return history
 
-        url = [self._BASE_URL + symbol for symbol in self._symbols]
+        self._url = [self._BASE_URL + symbol for symbol in self._symbols]
 
         params = {}
         # handle period depending on given period, start, end
@@ -143,47 +161,14 @@ class History:
             period = "ytd"
 
         if start:
-            if isinstance(start, str):
-                start = (
-                    dt.datetime.fromisoformat(start)
-                    .replace(tzinfo=ZoneInfo(timezone))
-                    .timestamp()
-                )
-
-            elif isinstance(start, pd.Timestamp):
-                start = start.timestamp()
-            elif isinstance(start, dt.datetime):
-                start = start.replace(tzinfo=ZoneInfo(timezone)).timestamp()
-
-            elif isinstance(start, dt.date):
-                start = (
-                    dt.datetime.fromordinal(start.toordinal())
-                    .replace(tzinfo=ZoneInfo(timezone))
-                    .timestamp()
-                )
+            start = to_timestamp(start, timezone=timezone)
 
             if not end:
-                end = dt.datetime.utcnow().timestamp()
+                end = int(pdl.now().timestamp())
             else:
-                if isinstance(end, str):
-                    end = (
-                        dt.datetime.fromisoformat(end)
-                        .replace(tzinfo=ZoneInfo(timezone))
-                        .timestamp()
-                    )
+                end=to_timestamp(end, timezone=timezone)
 
-                elif isinstance(end, pd.Timestamp):
-                    end = end.timestamp()
-                elif isinstance(end, dt.datetime):
-                    end = end.replace(tzinfo=ZoneInfo(timezone)).timestamp()
-                elif isinstance(end, dt.date):
-                    end = (
-                        dt.datetime.fromordinal(end.toordinal())
-                        .replace(tzinfo=ZoneInfo(timezone))
-                        .timestamp()
-                    )
-
-            params = dict(period1=int(start), period2=int(end))
+            params = dict(period1=start, period2=end)
 
         if period:
             params = dict(range=period)
@@ -197,11 +182,11 @@ class History:
                 includePrePost="true" if pre_post else "false",
             )
         )
-
+        self._params = params
         # fetch results
         results = await parallel_requests_async(
-            urls=url,
-            params=params,
+            urls=self._url,
+            params=self._params,
             parse_func=_parse,
             keys=self._symbols,
             return_type="json",

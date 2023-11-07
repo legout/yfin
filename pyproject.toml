@@ -37,6 +37,7 @@ dependencies = [
     "tqdm>=4.65.0",
     "pandas>=2.0.0",
     "parallel-requests @ git+https://github.com/legout/parallel-requests",
+    "pendulum>=2.1.2",
 ]
 name = "yfin"
 version = "0.2.4"
