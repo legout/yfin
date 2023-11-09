@@ -46,7 +46,7 @@ class History:
         dividends: bool = True,
         pre_post: bool = False,
         adjust: bool = False,
-        timezone: str = "UTC",
+            timezone: str = "UTC",
         *args,
         **kwargs,
     ) -> pd.DataFrame | None:
