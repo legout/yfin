@@ -1,8 +1,6 @@
 import asyncio
-from arrow import get
 
 import pandas as pd
-import requests
 from parallel_requests import parallel_requests_async
 
 from .constants import URLS
