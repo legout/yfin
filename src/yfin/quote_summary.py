@@ -4,11 +4,10 @@ import math
 
 import numpy as np
 import pandas as pd
-from parallel_requests import parallel_requests_async
+from .utils.base import Session
 
 from .constants import ALL_MODULES, URLS
-from .utils.base import camel_to_snake, snake_to_camel, get_yahoo_cookie, get_yahoo_crumb
-from http.cookiejar import Cookie
+from .utils.base import camel_to_snake, snake_to_camel
 
 def _convert_date(date: int | list) -> dt.datetime | list:
     if isinstance(date, list):
@@ -37,8 +36,7 @@ class QuoteSummary:
         self,
         symbols: str | tuple | list,
         modules: str | tuple | list = [],
-        cookie: Cookie | None = None,
-        crumb: str | None = None,
+        session: Session | None = None,
     ):
         if isinstance(symbols, str):
             symbols = [symbols]
@@ -46,15 +44,10 @@ class QuoteSummary:
         if isinstance(modules, str):
             modules = [modules]
             
-        if cookie is None:
-            self._cookie = get_yahoo_cookie()
-        else:
-            self._cookie = cookie
-        if crumb is None:
-            self._crumb = get_yahoo_crumb(self._cookie)
-        else:
-            self._crumb = crumb
-
+        if session is None:
+            session = Session()
+        self._session = session
+        
         _modules = [
             module for module in snake_to_camel(modules) if module in ALL_MODULES.keys()
         ]
@@ -121,16 +114,16 @@ class QuoteSummary:
                 "lang": "en-US",
                 "region": "US",
                 "corsDomain": "finance.yahoo.com",
-                "crumb": self._crumb,
+                "crumb": self._session.crumb,
                 
             }
 
-            results = await parallel_requests_async(
+            results = await self._session.request_async(
                 urls=self._url,
                 params=params,
                 keys=self.symbols,
                 parse_func=_parse if parse else None,
-                cookies={self._cookie.name: self._cookie.value},
+                #cookies={self._session.cookie.name: self._session.cookie.value},
                 return_type="json",
                 *args,
                 **kwargs,
