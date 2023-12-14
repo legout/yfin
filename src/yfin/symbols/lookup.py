@@ -75,7 +75,7 @@ class Lookup:
             for query_ in query
         ]
 
-        results = await self.session.request_async(
+        results = await self._session.request_async(
             urls=self._URL,
             params=params,
             # keys=query,
