@@ -4,7 +4,6 @@ import urllib.parse
 import numpy as np
 import pandas as pd
 from yfin.base import Session
-from requests import Session
 from tqdm import tqdm
 
 from ..constants import URLS
@@ -14,7 +13,14 @@ class Search:
     _URL1 = URLS["search"]
     _URL2 = URLS["searchAssist"]
 
-    def __init__(self, query: str | list, max_queries: int = 2500, session:Session | None = None, *args, **kwargs):
+    def __init__(
+        self,
+        query: str | list,
+        max_queries: int = 2500,
+        session: Session | None = None,
+        *args,
+        **kwargs,
+    ):
         """Symbol search endpoint for Yahoo Finance.
 
         Args:
@@ -35,7 +41,9 @@ class Search:
         ]
 
     async def _fetch1(
-        self, quotes_count: int = 10, news_count: int = -1, 
+        self,
+        quotes_count: int = 10,
+        news_count: int = -1,
     ) -> pd.DataFrame:
         """Fetch data.
         Args:
@@ -120,7 +128,7 @@ class Search:
                 headers=None,
                 parse_func=_parse,
                 method="GET",
-                return_type="json", 
+                return_type="json",
             )
 
             if isinstance(results_, dict):
@@ -193,10 +201,13 @@ class Search:
 
         return pd.concat(results)
 
-    async def fetch(self, search_assist=1,):
+    async def fetch(
+        self,
+        search_assist=1,
+    ):
         """Fetch data"""
         if search_assist == 1:
-            return await self._fetch1())
+            return await self._fetch1()
         else:
             return await self._fetch2()
 

@@ -1,6 +1,5 @@
 import asyncio
 from itertools import product
-from re import S
 from string import ascii_lowercase, digits
 
 import pandas as pd
@@ -174,7 +173,6 @@ async def lookup_search_async(
     Returns:
         pd.DataFrame: The search results as a pandas DataFrame.
     """
-    "
 
     lu = Lookup(session=session, *args,**kwargs)
     return await lu.search(query=query, type_=type_, country=country)
