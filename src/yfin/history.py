@@ -1,10 +1,11 @@
 import asyncio
-from time import time
-from .utils.datetime import to_timestamp, datetime_from_string
+
+from requests import session
+from .utils.datetime import to_timestamp,
 import datetime as dt
 import pendulum as pdl
 import pandas as pd
-from parallel_requests import parallel_requests_async
+from yfin.base import Session
 
 from .constants import URLS
 
@@ -14,11 +15,23 @@ class History:
 
     _BASE_URL = URLS["chart"]
 
-    def __init__(self, symbols: str | list):
+    def __init__(self, symbols: str | list, session: Session | None = None, *args, **kwargs):
+        """
+        Initializes a new instance of the class.
+        
+        Args:
+            symbols (str | list): The symbols to be initialized.
+            session (Session | None): The session to be used for initialization. Defaults to None.
+
+        """
         if isinstance(symbols, str):
             symbols = [symbols]
 
         self._symbols = symbols
+        
+        if session is None:
+            session = Session(*args, **kwargs)
+        self._session = session
 
     async def fetch(
         self,
@@ -47,28 +60,26 @@ class History:
         pre_post: bool = False,
         adjust: bool = False,
         timezone: str = "UTC",
-        *args,
-        **kwargs,
+
     ) -> pd.DataFrame | None:
-        """Fetch historical ohcl data from yahoo finance.
+        """
+        Fetches data from an API based on the provided parameters.
 
         Args:
-            start (str | dt.datetime | None, optional): Download start time. Defaults to None.
-            end (str | dt.datetime | None, optional): Download end time. Defaults to None.
-            period (str | None, optional): Download period. Defaults to None.
-                Either use period or start and end to define download period.
-                Valid options: 11d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
-            freq (str, optional): Download frequence. Defaults to "1d".
-                Valid options: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
-            splits (bool, optional): Include splilts into downloaded dataframe. Defaults to True.
-            dividends (bool, optional): Include dividends into downloaded dataframe. Defaults to True.
-            pre_post (bool, optional): Include data from pre and/or post market. Defaults to True.
-            adjust (bool, optional): Auto adjust ohcl data. Defaults to False.
-            timezone (str, optional): Timezone used for timestamp. Defaults to "UTC".
+            start (str | dt.datetime | dt.date | pd.Timestamp | pdl.Date | pdl.DateTime | int | float | None, optional): The start date or timestamp for the data. Defaults to None.
+            end (str | dt.datetime | dt.date | pd.Timestamp | pdl.Date | pdl.DateTime | int | float | None, optional): The end date or timestamp for the data. Defaults to None.
+            period (str | None, optional): The time period for the data. Defaults to None.
+            freq (str, optional): The frequency of the data. Defaults to "1d".
+            splits (bool, optional): Whether to include data on stock splits. Defaults to True.
+            dividends (bool, optional): Whether to include data on dividends. Defaults to True.
+            pre_post (bool, optional): Whether to include pre and post market data. Defaults to False.
+            adjust (bool, optional): Whether to adjust the data for stock splits. Defaults to False.
+            timezone (str, optional): The timezone for the data. Defaults to "UTC".
 
         Returns:
-            pd.DataFrame: ohcl history.
+            pd.DataFrame | None: The fetched data as a DataFrame, or None if no data is found.
         """
+        
 
         def _parse(response):
             splits = pd.DataFrame(columns=["time", "splitRatio"])
@@ -184,14 +195,13 @@ class History:
         )
         self._params = params
         # fetch results
-        results = await parallel_requests_async(
+        results = await self._session.request_async(
             urls=self._url,
             params=self._params,
             parse_func=_parse,
             keys=self._symbols,
             return_type="json",
-            *args,
-            **kwargs,
+
         )
 
         # combine results
@@ -246,29 +256,31 @@ async def history_async(
     pre_post: bool = True,
     adjust: bool = False,
     timezone: str = "UTC",
+    session: Session | None = None,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
-    """Fetch historical ohcl data from yahoo finance.
+    """
+    Fetches the historical data for the given symbols.
 
     Args:
-        start (str | dt.datetime | None, optional): Download start time. Defaults to None.
-        end (str | dt.datetime | None, optional): Download end time. Defaults to None.
-        period (str | None, optional): Download period. Defaults to None.
-            Either use period or start and end to define download period.
-            Valid options: 11d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
-        freq (str, optional): Download frequence. Defaults to "1d".
-            Valid options: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
-        splits (bool, optional): Include splilts into downloaded dataframe. Defaults to True.
-        dividends (bool, optional): Include dividends into downloaded dataframe. Defaults to True.
-        pre_post (bool, optional): Include data from pre and/or post market. Defaults to True.
-        adjust (bool, optional): Auto adjust ohcl data. Defaults to False.
-        timezone (str, optional): Timezone used for timestamp. Defaults to "UTC".
+        symbols (str | list): The symbols for which to fetch historical data.
+        start (str | dt.datetime | None, optional): The start date or datetime for the historical data. Defaults to None.
+        end (str | dt.datetime | None, optional): The end date or datetime for the historical data. Defaults to None.
+        period (str | None, optional): The period of the historical data. Defaults to None.
+        freq (str, optional): The frequency of the historical data. Defaults to "1d".
+        splits (bool, optional): Whether to include splits in the historical data. Defaults to True.
+        dividends (bool, optional): Whether to include dividends in the historical data. Defaults to True.
+        pre_post (bool, optional): Whether to include pre and post market data in the historical data. Defaults to True.
+        adjust (bool, optional): Whether to adjust the historical data for dividends and splits. Defaults to False.
+        timezone (str, optional): The timezone for the historical data. Defaults to "UTC".
+        session (Session | None, optional): The session to use for the historical data. Defaults to None.
 
     Returns:
-        pd.DataFrame: ohcl history.
+        pd.DataFrame: The historical data for the given symbols.
     """
-    h = History(symbols=symbols)
+
+    h = History(symbols=symbols, session=session, *args, **kwargs)
     await h.fetch(
         start=start,
         end=end,
@@ -279,8 +291,6 @@ async def history_async(
         pre_post=pre_post,
         adjust=adjust,
         timezone=timezone,
-        *args,
-        **kwargs,
     )
     return h.results
 
@@ -296,28 +306,32 @@ def history(
     pre_post: bool = True,
     adjust: bool = False,
     timezone: str = "UTC",
+    session: Session | None = None,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
-    """Fetch historical ohcl data from yahoo finance.
+    """
+    Get historical data for the specified symbols.
 
     Args:
-        start (str | dt.datetime | None, optional): Download start time. Defaults to None.
-        end (str | dt.datetime | None, optional): Download end time. Defaults to None.
-        period (str | None, optional): Download period. Defaults to None.
-            Either use period or start and end to define download period.
-            Valid options: 11d,5d,1mo,3mo,6mo,1y,2y,5y,10y,ytd,max
-        freq (str, optional): Download frequence. Defaults to "1d".
-            Valid options: 1m,2m,5m,15m,30m,60m,90m,1h,1d,5d,1wk,1mo,3mo
-        splits (bool, optional): Include splilts into downloaded dataframe. Defaults to True.
-        dividends (bool, optional): Include dividends into downloaded dataframe. Defaults to True.
-        pre_post (bool, optional): Include data from pre and/or post market. Defaults to True.
-        adjust (bool, optional): Auto adjust ohcl data. Defaults to False.
-        timezone (str, optional): Timezone used for timestamp. Defaults to "UTC".
+        symbols (str | list): The symbols for which to retrieve historical data.
+        start (str | dt.datetime | None, optional): The start date of the historical data. Defaults to None.
+        end (str | dt.datetime | None, optional): The end date of the historical data. Defaults to None.
+        period (str | None, optional): The period of the historical data. Defaults to None.
+        freq (str, optional): The frequency of the historical data. Defaults to "1d".
+        splits (bool, optional): Whether to include splits data. Defaults to True.
+        dividends (bool, optional): Whether to include dividends data. Defaults to True.
+        pre_post (bool, optional): Whether to include pre and post market data. Defaults to True.
+        adjust (bool, optional): Whether to adjust the data for dividends and splits. Defaults to False.
+        timezone (str, optional): The timezone to use for the timestamps. Defaults to "UTC".
+        session (Session | None, optional): The session to use for the request. Defaults to None.
+        *args: Additional positional arguments.
+        **kwargs: Additional keyword arguments.
 
     Returns:
-        pd.DataFrame: ohcl history.
+        pd.DataFrame: The historical data for the specified symbols.
     """
+    
 
     return asyncio.run(
         history_async(

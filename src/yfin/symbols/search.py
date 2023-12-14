@@ -3,7 +3,8 @@ import urllib.parse
 
 import numpy as np
 import pandas as pd
-from parallel_requests import parallel_requests_async
+from yfin.base import Session
+from requests import Session
 from tqdm import tqdm
 
 from ..constants import URLS
@@ -13,7 +14,7 @@ class Search:
     _URL1 = URLS["search"]
     _URL2 = URLS["searchAssist"]
 
-    def __init__(self, query: str | list, max_queries: int = 2500):
+    def __init__(self, query: str | list, max_queries: int = 2500, session:Session | None = None, *args, **kwargs):
         """Symbol search endpoint for Yahoo Finance.
 
         Args:
@@ -21,6 +22,9 @@ class Search:
             max_queries (int): maximum queries in on parallel request.
 
         """
+        if session is None:
+            session = Session(*args, **kwargs)
+        self._session = session
         if isinstance(query, str):
             query = [query]
 
@@ -31,7 +35,7 @@ class Search:
         ]
 
     async def _fetch1(
-        self, quotes_count: int = 10, news_count: int = -1, *args, **kwargs
+        self, quotes_count: int = 10, news_count: int = -1, 
     ) -> pd.DataFrame:
         """Fetch data.
         Args:
@@ -109,16 +113,14 @@ class Search:
 
         results = []
         for i, params_ in tqdm(enumerate(params)):
-            results_ = await parallel_requests_async(
+            results_ = await self._session.request_async(
                 urls=self._URL1,
                 params=params_,
                 keys=self._queries[i],
                 headers=None,
                 parse_func=_parse,
                 method="GET",
-                return_type="json",
-                *args,
-                **kwargs,
+                return_type="json", 
             )
 
             if isinstance(results_, dict):
@@ -170,7 +172,7 @@ class Search:
 
         results = []
         for i, queries in enumerate(self._queries):
-            results_ = await parallel_requests_async(
+            results_ = await self._session.request_async(
                 urls=urls[i],
                 params=params,
                 keys=queries,
@@ -178,8 +180,6 @@ class Search:
                 parse_func=_parse,
                 method="GET",
                 return_type="json",
-                *args,
-                **kwargs,
             )
 
             if isinstance(results_, dict):
@@ -193,15 +193,15 @@ class Search:
 
         return pd.concat(results)
 
-    async def fetch(self, search_assist=1, *args, **kwargs):
+    async def fetch(self, search_assist=1,):
         """Fetch data"""
         if search_assist == 1:
-            return await self._fetch1(*args, **kwargs)
+            return await self._fetch1())
         else:
-            return await self._fetch2(*args, **kwargs)
+            return await self._fetch2()
 
-    def __call__(self, search_assist=1, *args, **kwargs):
-        return asyncio.run(self.fetch(search_assist=search_assist, *args, **kwargs))
+    def __call__(self, search_assist=1):
+        return asyncio.run(self.fetch(search_assist=search_assist))
 
 
 async def search_async(

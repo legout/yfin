@@ -3,6 +3,7 @@ import re
 from yfinance.data import YfData
 from parallel_requests.parallel_requests_asyncer import ParallelRequests
 
+
 class Session(ParallelRequests):
     def __init__(
         self,

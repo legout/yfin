@@ -1,15 +1,33 @@
 import asyncio
 from itertools import product
+from re import S
 from string import ascii_lowercase, digits
 
 import pandas as pd
-from parallel_requests import parallel_requests_async
+from yfin.base import Session
 
 from ..constants import COUNTRIES, URLS
 
 
 class Lookup:
     _URL = URLS["lookup"]
+    
+    def __init__(self, session: Session | None = None, *args, **kwargs):
+        """
+        Initializes a new instance of the class.
+
+        Args:
+            session (Session | None): An optional session object. If not provided, 
+                a new session will be created using the provided arguments and keyword arguments.
+            *args: Variable length argument list.
+            **kwargs: Arbitrary keyword arguments.
+
+        Returns:
+            None
+        """
+        if session is None:
+            session = Session(*args, **kwargs)
+        self._session = session
 
     async def search(
         self,
@@ -19,15 +37,19 @@ class Lookup:
         *args,
         **kwargs,
     ) -> pd.DataFrame:
-        """Run query search on "https://query1.finance.yahoo.com/v1/finance/lookup"
+        """
+        Search for data based on a query or a list of queries.
 
         Args:
-            query (str | list): Search query.
-            type_ (str | list, optional): Asset type. Defaults to "equity".
-            country (str, optional): Country. Defaults to "united states".
+            query (Union[str, List[str]]): The query or list of queries to search for.
+            type_ (Union[str, List[str]], optional): The type or list of types of data to search for. 
+                Defaults to "equity".
+            country (str, optional): The country to search in. Defaults to "united states".
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
 
         Returns:
-            pd.DataFrame: Search results.
+            pd.DataFrame: A pandas DataFrame containing the search results.
         """
 
         def _parse(response):
@@ -54,7 +76,7 @@ class Lookup:
             for query_ in query
         ]
 
-        results = await parallel_requests_async(
+        results = await self.session.request_async(
             urls=self._URL,
             params=params,
             # keys=query,
@@ -98,16 +120,21 @@ class Lookup:
         *args,
         **kwargs,
     ) -> pd.DataFrame:
-        """Run query search for `all` queries with length `query_length`.
+        """
+        Performs a lookup operation based on the specified query parameters and returns the 
+        search results as a pandas DataFrame.
 
         Args:
-            query_length (int, optional): Query length. Defaults to 2.
-            type_ (str | list, optional): Asset type. Defaults to "equity".
-            country (str, optional): Country. Defaults to "united states".
+            query_length (int, optional): The length of each query to generate. Defaults to 2.
+            type_ (str | list, optional): The type of search results to retrieve. Defaults to "equity".
+            country (str, optional): The country to limit the search results to. Defaults to "united states".
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
 
         Returns:
-            pd.DataFrame: Search results.
+            pd.DataFrame: The search results as a pandas DataFrame.
         """
+        
 
         letters = list(ascii_lowercase)
         numbers = list(digits)
@@ -129,45 +156,57 @@ async def lookup_search_async(
     query: str | list,
     type_: str | list = "equity",
     country: str = "united states",
+    session: Session | None = None,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
-    """Run query search for `all` queries with length `query_length`.
+    """
+    Asynchronously performs a lookup search based on the provided query, type, and country.
 
     Args:
-        query_length (int, optional): Query length. Defaults to 2.
-        type_ (str | list, optional): Asset type. Defaults to "equity".
-        country (str, optional): Country. Defaults to "united states".
+        query (str | list): The search query or queries to perform. Can be a single string or a list of strings.
+        type_ (str | list, optional): The type or types of search to perform. Defaults to "equity".
+        country (str, optional): The country to perform the search in. Defaults to "united states".
+        session (Session | None, optional): The session to use for the lookup. Defaults to None.
+        *args: Variable length argument list.
+        **kwargs: Arbitrary keyword arguments.
 
     Returns:
-        pd.DataFrame: Search results.
+        pd.DataFrame: The search results as a pandas DataFrame.
     """
+    "
 
-    lu = Lookup()
-    return await lu.search(query=query, type_=type_, country=country, *args, **kwargs)
+    lu = Lookup(session=session, *args,**kwargs)
+    return await lu.search(query=query, type_=type_, country=country)
 
 
 def lookup_search(
     query: str | list,
     type_: str | list = "equity",
     country: str = "united states",
+    session: Session | None = None,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
-    """Run query search for `all` queries with length `query_length`.
+    """
+    Perform a lookup search based on the given query, type, and country.
 
     Args:
-        query_length (int, optional): Query length. Defaults to 2.
-        type_ (str | list, optional): Asset type. Defaults to "equity".
-        country (str, optional): Country. Defaults to "united states".
+        query (str | list): The query string or list of query strings to search for.
+        type_ (str | list, optional): The type or list of types to filter the search by. Defaults to "equity".
+        country (str, optional): The country to filter the search by. Defaults to "united states".
+        session (Session | None, optional): The session object to use for the lookup. Defaults to None.
+        *args: Additional positional arguments.
+        **kwargs: Additional keyword arguments.
 
     Returns:
-        pd.DataFrame: Search results.
+        pd.DataFrame: The resulting DataFrame from the search.
     """
+    
 
-    lu = Lookup()
+    lu = Lookup(session=session, *args,**kwargs)
     return asyncio.run(
-        lu.search(query=query, type_=type_, country=country, *args, **kwargs)
+        lu.search(query=query, type_=type_, country=country)
     )
 
 
@@ -175,23 +214,29 @@ async def lookup_async(
     query_length: int,
     type_: str | list,
     country: str = "united states",
+    session: Session | None = None,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
-    """Run query search for `all` queries with length `query_length`.
-
-    Args:
-        query_length (int, optional): Query length. Defaults to 2.
-        type_ (str | list, optional): Asset type. Defaults to "equity".
-        country (str, optional): Country. Defaults to "united states".
-
-    Returns:
-        pd.DataFrame: Search results.
+    """
+        Asynchronously looks up data based on the given query length, type, country.
+        
+        Args:
+            query_length (int): The length of the query.
+            type_ (str | list): The type of the query.
+            country (str, optional): The country for the lookup. Defaults to "united states".
+            session (Session | None, optional): The session for the lookup. Defaults to None.
+            *args: Additional positional arguments.
+            **kwargs: Additional keyword arguments.
+            
+        Returns:
+            pd.DataFrame: The lookup result as a pandas DataFrame.
     """
 
-    lu = Lookup()
+
+    lu = Lookup(session=session, *args,**kwargs)
     return await lu.lookup(
-        query_length=query_length, type_=type_, country=country, *args, **kwargs
+        query_length=query_length, type_=type_, country=country,
     )
 
 
@@ -199,94 +244,29 @@ def lookup(
     query_length: int,
     type_: str | list,
     country: str = "united states",
+    session: Session | None = None,
     *args,
     **kwargs,
 ) -> pd.DataFrame:
-    """Run query search for `all` queries with length `query_length`.
+    """
+    Lookup function to perform a query for a given query length, type, and country.
 
     Args:
-        query_length (int, optional): Query length. Defaults to 2.
-        type_ (str | list, optional): Asset type. Defaults to "equity".
-        country (str, optional): Country. Defaults to "united states".
+        query_length (int): The length of the query.
+        type_ (str | list): The type of query.
+        country (str, optional): The country for the query. Defaults to "united states".
+        session (Session | None, optional): The session object. Defaults to None.
+        *args: Additional positional arguments.
+        **kwargs: Additional keyword arguments.
 
     Returns:
-        pd.DataFrame: Search results.
+        pd.DataFrame: The result of the query as a DataFrame.
     """
 
-    lu = Lookup()
+
+    lu = Lookup(session=session, *args,**kwargs)
     return asyncio.run(
         lu.lookup(
             query_length=query_length, type_=type_, country=country, *args, **kwargs
         )
     )
-
-
-# def download(
-#     max_combination_length: int = 2,
-#     types: str = "equity",
-#     limits_per_host: int = 50,
-#     semaphore: int = 25,
-#     use_random_proxy: bool = False,
-#     verbose: bool = True,
-#     validate_: bool = True,
-# ) -> pd.DataFrame:
-#     """Generates all possible combinations from ascii letters, numers, "." and "="
-#     with a length up to `max_query_length` and fetches the results from the
-#     yahoo finance symbol lookup endpoint.
-
-#     Args:
-#         max_combination_length (int, optional): maximum combination length . Defaults to 2.
-#         types (str, optional): Can be anyone or a combination of `equity, mutualfund, etf,
-#             index, future, currency, cryptocurrency`. Defaults to "equity".
-#         limits_per_host (int, optional):  Is used to limit the number of parallel requests.
-#             Should be a value between 10 and 100.. Defaults to 50.
-#         semaphore (int, optional): Is used to limit the number of parallel requests.
-#             Should be between smaller than `limits-per-host`.. Defaults to 25.
-#         use_random_proxy (bool, optional):
-#             Use this flag to use a random proxy for each request. Currently a list of free proxies is used.
-#             Defaults to False.
-#         verbose (bool, optional): Wheter to show a progressbar or not. Defaults to True.
-#         validate_ (bool, optional): Run a finally validation of the downloaded symbols. Defaults to True.
-
-#     Returns:
-#         pd.DataFrame: symbols
-#     """
-
-#     # lu = Lookup()
-
-#     query_lengths = range(1, max_combination_length + 1)
-#     types = types.split(",")
-
-#     results = pd.DataFrame()
-#     for type_ in types:
-#         for query_length in query_lengths:
-#             res_ = lookup(
-#                 query_length=query_length,
-#                 type_=type_,
-#                 limits_per_host=limits_per_host,
-#                 semaphore=semaphore,
-#                 use_random_proxy=use_random_proxy,
-#                 verbose=verbose,
-#             )
-#             results = pd.concat(
-#                 [results, res_.drop_duplicates(subset=["symbol", "exchange"])],
-#                 ignore_index=True,
-#             )
-
-#     results = results.rename(
-#         {"shortName": "name", "quoteType": "type", "industryName": "industry"}, axis=1
-#     ).drop_duplicates(subset=["symbol", "exchange"])[
-#         ["symbol", "name", "exchange", "type", "industry"]
-#     ]
-#     if validate_:
-#         validation = validate(
-#             results["symbol"].tolist(),
-#             max_symbols=750,
-#             limits_per_host=limits_per_host,
-#             semaphore=semaphore,
-#             verbose=verbose,
-#         ).reset_index()
-
-#         results = results.merge(validation, on=["symbol"])
-
-#     return results

@@ -37,6 +37,8 @@ class QuoteSummary:
         symbols: str | tuple | list,
         modules: str | tuple | list = [],
         session: Session | None = None,
+        *args,
+        **kwargs
     ):
         if isinstance(symbols, str):
             symbols = [symbols]
@@ -45,7 +47,7 @@ class QuoteSummary:
             modules = [modules]
             
         if session is None:
-            session = Session()
+            session = Session(*args, **kwargs)
         self._session = session
         
         _modules = [
@@ -125,8 +127,7 @@ class QuoteSummary:
                 parse_func=_parse if parse else None,
                 #cookies={self._session.cookie.name: self._session.cookie.value},
                 return_type="json",
-                *args,
-                **kwargs,
+               
             )
 
             # remove empy results

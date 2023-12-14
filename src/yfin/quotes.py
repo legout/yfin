@@ -109,13 +109,15 @@ class Quotes:
         self,
         symbols: str | list | tuple,
         session: Session | None = None,
+        *args,
+        **kwargs,
     ):
         if isinstance(symbols, str):
             symbols = [symbols]
         self._symbols = symbols
 
         if session is None:
-            session = Session()
+            session = Session(*args, **kwargs)
         self._session = session
 
     async def fetch(
@@ -123,18 +125,19 @@ class Quotes:
         symbols: str | list | tuple = None,
         chunk_size: int = 1500,
         fields: list | None = None,
-        *args,
-        **kwargs,
     ) -> pd.DataFrame:
-        """Fetch quotes for given symbols.
+        """
+        Fetches quotes for the given symbols and returns it as a pandas DataFrame.
 
         Args:
-            symbols (str | list): Symbols.
-            chunk_size (int, optional): Chunk size of symbols for each request. Defaults to 1000.
+            symbols (str | list | tuple, optional): The symbols to fetch data for. Defaults to None.
+            chunk_size (int, optional): The size of each chunk of symbols to fetch. Defaults to 1500.
+            fields (list, optional): The fields to fetch for each symbol. Defaults to None.
 
         Returns:
-            pd.DataFrame: Quotes.
+            pd.DataFrame: The fetched data as a pandas DataFrame.
         """
+
 
         def _parse(response: object) -> pd.DataFrame:
             df = pd.DataFrame(response["quoteResponse"]["result"])
@@ -180,8 +183,7 @@ class Quotes:
             parse_func=_parse,
             # cookies={self._cookie.name: self._cookie.value},
             return_type="json",
-            *args,
-            **kwargs,
+
         )
 
         if isinstance(results, list):
@@ -207,17 +209,23 @@ async def quotes_async(
     *args,
     **kwargs,
 ) -> pd.DataFrame:
-    """Fetch quotes for given symbols.
+    """
+    Asynchronously fetches quotes for the given symbols.
 
-    Args:
-        symbols (str | list): Symbols.
-        chunk_size (int, optional): Chunk size of symbols for each request. Defaults to 1000.
+    Parameters:
+        symbols (str | list): The symbols for which to fetch quotes.
+        chunk_size (int, optional): The number of quotes to fetch per request. Defaults to 1000.
+        fields (list | None, optional): The fields to include in the quotes. Defaults to None.
+        session (Session | None, optional): The session to use for the requests. Defaults to None.
+        *args: Additional positional arguments.
+        **kwargs: Additional keyword arguments.
 
     Returns:
-        pd.DataFrame: Quotes.
+        pd.DataFrame: A DataFrame containing the fetched quotes.
     """
-    q = Quotes(symbols=symbols, session=session)
-    await q.fetch(chunk_size=chunk_size, fields=fields, *args, **kwargs)
+    
+    q = Quotes(symbols=symbols, session=session, *args, **kwargs)
+    await q.fetch(chunk_size=chunk_size, fields=fields)
 
     return q.results
 
@@ -230,15 +238,21 @@ def quotes(
     *args,
     **kwargs,
 ) -> pd.DataFrame:
-    """Fetch quotes for given symbols.
+    """
+    Generates a pandas DataFrame of quotes for the given symbols.
 
     Args:
-        symbols (str | list): Symbols.
-        chunk_size (int, optional): Chunk size of symbols for each request. Defaults to 1000.
+        symbols (str | list): The symbols for which to retrieve quotes.
+        chunk_size (int, optional): The size of each chunk of symbols to retrieve quotes for. Defaults to 1000.
+        fields (list | None, optional): The fields to include in the quotes DataFrame. Defaults to None.
+        session (Session | None, optional): The optional session to use for the quotes request. Defaults to None.
+        *args: Additional positional arguments.
+        **kwargs: Additional keyword arguments.
 
     Returns:
-        pd.DataFrame: Quotes.
+        pd.DataFrame: A pandas DataFrame containing the quotes for the given symbols.
     """
+    
     return asyncio.run(
         quotes_async(
             symbols=symbols,

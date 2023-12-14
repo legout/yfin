@@ -1,12 +1,14 @@
 import asyncio
 
 import pandas as pd
-from parallel_requests import parallel_requests_async
+from yfin.base import Session
 
 from ..constants import URLS
 
 
-async def validate_async(symbol: str | list, max_symbols=1000, *args, **kwargs):
+async def validate_async(
+    symbol: str | list, max_symbols:int=500, session=None, *args, **kwargs
+):
     """Validation of give symbols. True means the given symbol is a valida
     symbol in the yahoo finance database.
 
@@ -14,6 +16,8 @@ async def validate_async(symbol: str | list, max_symbols=1000, *args, **kwargs):
         symbol (str | list): symbol
         max_symbols (int, optional): number if symbols included into one request. Defaults to 1000.
     """
+    if session is None:
+        session = Session(*args, **kwargs)
 
     def _parse(response):
         return pd.Series(response["symbolsValidation"]["result"][0]).rename("valid")
@@ -27,8 +31,11 @@ async def validate_async(symbol: str | list, max_symbols=1000, *args, **kwargs):
     ]
     params = [{"symbols": ",".join(s)} for s in symbol_]
 
-    results = await parallel_requests_async(
-        urls=url, params=params, parse_func=_parse, return_type="json", *args, **kwargs
+    results = await session.request_async(
+        urls=url,
+        params=params,
+        parse_func=_parse,
+        return_type="json",
     )
     if isinstance(results, list):
         results = pd.concat(results).reset_index().rename({"index": "symbol"}, axis=1)
@@ -38,7 +45,13 @@ async def validate_async(symbol: str | list, max_symbols=1000, *args, **kwargs):
     return results
 
 
-def validate(symbol: str | list, max_symbols=1000, *args, **kwargs):
+def validate(
+    symbol: str | list,
+    max_symbols: int = 500,
+    session: Session | None = None,
+    *args,
+    **kwargs,
+):
     """Validation of give symbols. True means the given symbol is a valida
     symbol in the yahoo finance database.
 
@@ -48,5 +61,5 @@ def validate(symbol: str | list, max_symbols=1000, *args, **kwargs):
     """
 
     return asyncio.run(
-        validate_async(symbol=symbol, max_symbols=max_symbols, *args, **kwargs)
+        validate_async(symbol=symbol, max_symbols=max_symbols, session=session, *args, **kwargs)
     )
