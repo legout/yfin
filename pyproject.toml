@@ -41,7 +41,7 @@ dependencies = [
     "yfinance>=0.2.33",
 ]
 name = "yfin"
-version = "0.2.6"
+version = "0.2.7"
 description = ""
 readme = "README.md"
 
