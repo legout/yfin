@@ -1,13 +1,14 @@
 import asyncio
-
-from requests import session
-from .utils.datetime import to_timestamp,
 import datetime as dt
-import pendulum as pdl
-import pandas as pd
-from yfin.base import Session
 
+import pandas as pd
+import pendulum as pdl
+
+from .base import Session
 from .constants import URLS
+
+# from requests import session
+from .utils.datetime import to_timestamp
 
 
 class History:
@@ -15,10 +16,12 @@ class History:
 
     _BASE_URL = URLS["chart"]
 
-    def __init__(self, symbols: str | list, session: Session | None = None, *args, **kwargs):
+    def __init__(
+        self, symbols: str | list, session: Session | None = None, *args, **kwargs
+    ):
         """
         Initializes a new instance of the class.
-        
+
         Args:
             symbols (str | list): The symbols to be initialized.
             session (Session | None): The session to be used for initialization. Defaults to None.
@@ -28,31 +31,35 @@ class History:
             symbols = [symbols]
 
         self._symbols = symbols
-        
+
         if session is None:
             session = Session(*args, **kwargs)
         self._session = session
 
     async def fetch(
         self,
-        start: str
-        | dt.datetime
-        | dt.date
-        | pd.Timestamp
-        | pdl.Date
-        | pdl.DateTime
-        | int
-        | float
-        | None = None,
-        end: str
-        | dt.datetime
-        | dt.date
-        | pd.Timestamp
-        | pdl.Date
-        | pdl.DateTime
-        | int
-        | float
-        | None = None,
+        start: (
+            str
+            | dt.datetime
+            | dt.date
+            | pd.Timestamp
+            | pdl.Date
+            | pdl.DateTime
+            | int
+            | float
+            | None
+        ) = None,
+        end: (
+            str
+            | dt.datetime
+            | dt.date
+            | pd.Timestamp
+            | pdl.Date
+            | pdl.DateTime
+            | int
+            | float
+            | None
+        ) = None,
         period: str | None = None,
         freq: str = "1d",
         splits: bool = True,
@@ -60,7 +67,6 @@ class History:
         pre_post: bool = False,
         adjust: bool = False,
         timezone: str = "UTC",
-
     ) -> pd.DataFrame | None:
         """
         Fetches data from an API based on the provided parameters.
@@ -79,7 +85,6 @@ class History:
         Returns:
             pd.DataFrame | None: The fetched data as a DataFrame, or None if no data is found.
         """
-        
 
         def _parse(response):
             splits = pd.DataFrame(columns=["time", "splitRatio"])
@@ -88,7 +93,11 @@ class History:
             if "chart" in response:
                 res = response["chart"]["result"][0]
 
-                timestamp =pd.Series(res["timestamp"]).apply(pd.to_datetime, unit="s", utc=True).rename("time")
+                timestamp = (
+                    pd.Series(res["timestamp"])
+                    .apply(pd.to_datetime, unit="s", utc=True)
+                    .rename("time")
+                )
 
                 ohlcv = pd.DataFrame(res["indicators"]["quote"][0])
 
@@ -112,7 +121,7 @@ class History:
                         splits["splitRatio"] = splits["splitRatio"].apply(
                             lambda s: splitratio_to_float(s)
                         )
-                        splits["time"] =splits["time"].dt.tz_localize("UTC")
+                        splits["time"] = splits["time"].dt.tz_localize("UTC")
 
                     if "dividends" in res["events"]:
                         dividends = (
@@ -120,7 +129,7 @@ class History:
                             .astype({"date": "datetime64[s]"})
                             .rename({"date": "time"}, axis=1)
                         )
-                        dividends["time"] =dividends["time"].dt.tz_localize("UTC")
+                        dividends["time"] = dividends["time"].dt.tz_localize("UTC")
 
                 history = (
                     pd.concat([timestamp, ohlcv, adjclose], axis=1)
@@ -135,9 +144,7 @@ class History:
                         * (history["adjclose"] / history["close"]).values[:, None]
                     )
                 if timezone != "UTC":
-                    history["time"] = (
-                        history["time"].dt.tz_convert(timezone)
-                    )
+                    history["time"] = history["time"].dt.tz_convert(timezone)
                 if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
                     history["time"] = history["time"].dt.date
 
@@ -146,7 +153,7 @@ class History:
                     k: v
                     for k, v in {
                         "symbol": str,
-                        #"time": "datetime64[s]",
+                        # "time": "datetime64[s]",
                         "low": float,
                         "high": float,
                         "volume": int,
@@ -177,7 +184,7 @@ class History:
             if not end:
                 end = int(pdl.now().timestamp())
             else:
-                end=to_timestamp(end, timezone=timezone)
+                end = to_timestamp(end, timezone=timezone)
 
             params = dict(period1=start, period2=end)
 
@@ -201,7 +208,6 @@ class History:
             parse_func=_parse,
             keys=self._symbols,
             return_type="json",
-
         )
 
         # combine results
@@ -331,7 +337,6 @@ def history(
     Returns:
         pd.DataFrame: The historical data for the specified symbols.
     """
-    
 
     return asyncio.run(
         history_async(

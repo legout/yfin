@@ -1,10 +1,11 @@
 import asyncio
 
 import pandas as pd
-from .utils.base import Session
 
+from .base import Session
 from .constants import URLS
 from .utils.base import camel_to_snake
+
 
 class Quotes:
     _URL = URLS["quotes"]
@@ -138,7 +139,6 @@ class Quotes:
             pd.DataFrame: The fetched data as a pandas DataFrame.
         """
 
-
         def _parse(response: object) -> pd.DataFrame:
             df = pd.DataFrame(response["quoteResponse"]["result"])
 
@@ -183,7 +183,6 @@ class Quotes:
             parse_func=_parse,
             # cookies={self._cookie.name: self._cookie.value},
             return_type="json",
-
         )
 
         if isinstance(results, list):
@@ -223,7 +222,7 @@ async def quotes_async(
     Returns:
         pd.DataFrame: A DataFrame containing the fetched quotes.
     """
-    
+
     q = Quotes(symbols=symbols, session=session, *args, **kwargs)
     await q.fetch(chunk_size=chunk_size, fields=fields)
 
@@ -252,7 +251,7 @@ def quotes(
     Returns:
         pd.DataFrame: A pandas DataFrame containing the quotes for the given symbols.
     """
-    
+
     return asyncio.run(
         quotes_async(
             symbols=symbols,

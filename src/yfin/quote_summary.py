@@ -4,8 +4,8 @@ import math
 
 import numpy as np
 import pandas as pd
-from .base import Session
 
+from .base import Session
 from .constants import ALL_MODULES, URLS
 from .utils.base import camel_to_snake, snake_to_camel
 

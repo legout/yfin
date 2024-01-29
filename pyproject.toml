@@ -16,36 +16,29 @@
 # tqdm = "^4.65.0"
 
 
-
 [tool.pdm.build]
-includes = [
-    "src/yfin",
-]
+includes = ["src/yfin"]
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
 [project]
-authors = [
-    {name = "Volker Lorrmann", email = "volker.lorrmann@gmail.com"},
-]
+authors = [{ name = "Volker Lorrmann", email = "volker.lorrmann@gmail.com" }]
 requires-python = ">=3.11,<3.13"
 dependencies = [
-    "numpy>=1.24.2",
-    "requests>=2.28.1",
-    "lxml>=4.9.1",
-    "tqdm>=4.65.0",
-    "pandas>=2.0.0",
-    "parallel-requests @ git+https://github.com/legout/parallel-requests",
-    "pendulum>=2.1.2",
-    "yfinance>=0.2.33",
+  "numpy>=1.24.2",
+  "requests>=2.28.1",
+  "lxml>=4.9.1",
+  "tqdm>=4.65.0",
+  "pandas>=2.0.0",
+  "parallel-requests @ git+https://github.com/legout/parallel-requests",
+  "pendulum>=2.1.2",
+  "yfinance>=0.2.33",
 ]
 name = "yfin"
-version = "0.2.7.1"
+version = "0.2.8"
 description = ""
 readme = "README.md"
 
 [project.optional-dependencies]
-dev = [
-    "ipython>=8.17.2",
-]
+dev = ["ipython>=8.17.2", "isort>=5.13.2", "black>=24.1.1"]

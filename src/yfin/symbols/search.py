@@ -3,9 +3,9 @@ import urllib.parse
 
 import numpy as np
 import pandas as pd
-from yfin.base import Session
 from tqdm import tqdm
 
+from ..base import Session
 from ..constants import URLS
 
 

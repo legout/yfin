@@ -3,20 +3,20 @@ from itertools import product
 from string import ascii_lowercase, digits
 
 import pandas as pd
-from yfin.base import Session
 
+from ..base import Session
 from ..constants import COUNTRIES, URLS
 
 
 class Lookup:
     _URL = URLS["lookup"]
-    
+
     def __init__(self, session: Session | None = None, *args, **kwargs):
         """
         Initializes a new instance of the class.
 
         Args:
-            session (Session | None): An optional session object. If not provided, 
+            session (Session | None): An optional session object. If not provided,
                 a new session will be created using the provided arguments and keyword arguments.
             *args: Variable length argument list.
             **kwargs: Arbitrary keyword arguments.
@@ -41,7 +41,7 @@ class Lookup:
 
         Args:
             query (Union[str, List[str]]): The query or list of queries to search for.
-            type_ (Union[str, List[str]], optional): The type or list of types of data to search for. 
+            type_ (Union[str, List[str]], optional): The type or list of types of data to search for.
                 Defaults to "equity".
             country (str, optional): The country to search in. Defaults to "united states".
             *args: Additional positional arguments.
@@ -120,7 +120,7 @@ class Lookup:
         **kwargs,
     ) -> pd.DataFrame:
         """
-        Performs a lookup operation based on the specified query parameters and returns the 
+        Performs a lookup operation based on the specified query parameters and returns the
         search results as a pandas DataFrame.
 
         Args:
@@ -133,7 +133,6 @@ class Lookup:
         Returns:
             pd.DataFrame: The search results as a pandas DataFrame.
         """
-        
 
         letters = list(ascii_lowercase)
         numbers = list(digits)
@@ -174,7 +173,7 @@ async def lookup_search_async(
         pd.DataFrame: The search results as a pandas DataFrame.
     """
 
-    lu = Lookup(session=session, *args,**kwargs)
+    lu = Lookup(session=session, *args, **kwargs)
     return await lu.search(query=query, type_=type_, country=country)
 
 
@@ -200,12 +199,9 @@ def lookup_search(
     Returns:
         pd.DataFrame: The resulting DataFrame from the search.
     """
-    
 
-    lu = Lookup(session=session, *args,**kwargs)
-    return asyncio.run(
-        lu.search(query=query, type_=type_, country=country)
-    )
+    lu = Lookup(session=session, *args, **kwargs)
+    return asyncio.run(lu.search(query=query, type_=type_, country=country))
 
 
 async def lookup_async(
@@ -217,24 +213,25 @@ async def lookup_async(
     **kwargs,
 ) -> pd.DataFrame:
     """
-        Asynchronously looks up data based on the given query length, type, country.
-        
-        Args:
-            query_length (int): The length of the query.
-            type_ (str | list): The type of the query.
-            country (str, optional): The country for the lookup. Defaults to "united states".
-            session (Session | None, optional): The session for the lookup. Defaults to None.
-            *args: Additional positional arguments.
-            **kwargs: Additional keyword arguments.
-            
-        Returns:
-            pd.DataFrame: The lookup result as a pandas DataFrame.
+    Asynchronously looks up data based on the given query length, type, country.
+
+    Args:
+        query_length (int): The length of the query.
+        type_ (str | list): The type of the query.
+        country (str, optional): The country for the lookup. Defaults to "united states".
+        session (Session | None, optional): The session for the lookup. Defaults to None.
+        *args: Additional positional arguments.
+        **kwargs: Additional keyword arguments.
+
+    Returns:
+        pd.DataFrame: The lookup result as a pandas DataFrame.
     """
 
-
-    lu = Lookup(session=session, *args,**kwargs)
+    lu = Lookup(session=session, *args, **kwargs)
     return await lu.lookup(
-        query_length=query_length, type_=type_, country=country,
+        query_length=query_length,
+        type_=type_,
+        country=country,
     )
 
 
@@ -261,8 +258,7 @@ def lookup(
         pd.DataFrame: The result of the query as a DataFrame.
     """
 
-
-    lu = Lookup(session=session, *args,**kwargs)
+    lu = Lookup(session=session, *args, **kwargs)
     return asyncio.run(
         lu.lookup(
             query_length=query_length, type_=type_, country=country, *args, **kwargs

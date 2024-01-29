@@ -1,13 +1,13 @@
 import asyncio
 
 import pandas as pd
-from yfin.base import Session
 
+from ..base import Session
 from ..constants import URLS
 
 
 async def validate_async(
-    symbol: str | list, max_symbols:int=500, session=None, *args, **kwargs
+    symbol: str | list, max_symbols: int = 500, session=None, *args, **kwargs
 ):
     """Validation of give symbols. True means the given symbol is a valida
     symbol in the yahoo finance database.
@@ -61,5 +61,7 @@ def validate(
     """
 
     return asyncio.run(
-        validate_async(symbol=symbol, max_symbols=max_symbols, session=session, *args, **kwargs)
+        validate_async(
+            symbol=symbol, max_symbols=max_symbols, session=session, *args, **kwargs
+        )
     )

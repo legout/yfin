@@ -1,5 +1,5 @@
-from yfinance.data import YfData
 from parallel_requests.parallel_requests_asyncer import ParallelRequests
+from yfinance.data import YfData
 
 
 class Session(ParallelRequests):
