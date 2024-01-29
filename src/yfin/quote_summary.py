@@ -4,10 +4,11 @@ import math
 
 import numpy as np
 import pandas as pd
-from .utils.base import Session
+from .base import Session
 
 from .constants import ALL_MODULES, URLS
 from .utils.base import camel_to_snake, snake_to_camel
+
 
 def _convert_date(date: int | list) -> dt.datetime | list:
     if isinstance(date, list):
@@ -38,18 +39,18 @@ class QuoteSummary:
         modules: str | tuple | list = [],
         session: Session | None = None,
         *args,
-        **kwargs
+        **kwargs,
     ):
         if isinstance(symbols, str):
             symbols = [symbols]
         self.symbols = symbols
         if isinstance(modules, str):
             modules = [modules]
-            
+
         if session is None:
             session = Session(*args, **kwargs)
         self._session = session
-        
+
         _modules = [
             module for module in snake_to_camel(modules) if module in ALL_MODULES.keys()
         ]
@@ -117,7 +118,6 @@ class QuoteSummary:
                 "region": "US",
                 "corsDomain": "finance.yahoo.com",
                 "crumb": self._session.crumb,
-                
             }
 
             results = await self._session.request_async(
@@ -125,9 +125,8 @@ class QuoteSummary:
                 params=params,
                 keys=self.symbols,
                 parse_func=_parse if parse else None,
-                #cookies={self._session.cookie.name: self._session.cookie.value},
+                # cookies={self._session.cookie.name: self._session.cookie.value},
                 return_type="json",
-               
             )
 
             # remove empy results
