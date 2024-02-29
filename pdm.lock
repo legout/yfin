@@ -5,7 +5,7 @@
 groups = ["default", "dev"]
 strategy = ["cross_platform"]
 lock_version = "4.4.1"
-content_hash = "sha256:fad03fbffd4cff580df33ecf15e7f570852f41ba5e48e57ececd9b535dbd1b86"
+content_hash = "sha256:50cadcb6063ef59ff8e5143b533da5932aacf1b2613d4ab6b94cdfd58aa19fb2"
 
 [[package]]
 name = "anyio"
@@ -645,6 +645,18 @@ files = [
 ]
 
 [[package]]
+name = "requests-futures"
+version = "1.0.1"
+summary = "Asynchronous Python HTTP for Humans."
+dependencies = [
+    "requests>=1.2.0",
+]
+files = [
+    {file = "requests-futures-1.0.1.tar.gz", hash = "sha256:f55a4ef80070e2858e7d1e73123d2bfaeaf25b93fd34384d8ddf148e2b676373"},
+    {file = "requests_futures-1.0.1-py2.py3-none-any.whl", hash = "sha256:4a2f5472e9911a79532137d156aa937cd9cd90fec55677f71b2976d1f7a66d38"},
+]
+
+[[package]]
 name = "six"
 version = "1.16.0"
 requires_python = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*"
@@ -795,8 +807,26 @@ files = [
 ]
 
 [[package]]
+name = "yahooquery"
+version = "2.3.7"
+requires_python = ">=3.8.1,<4.0"
+summary = "Python wrapper for an unofficial Yahoo Finance API"
+dependencies = [
+    "beautifulsoup4<5.0.0,>=4.12.2",
+    "lxml<5.0.0,>=4.9.3",
+    "pandas<3.0.0,>=2.0.3",
+    "requests-futures<2.0.0,>=1.0.1",
+    "requests<3.0.0,>=2.31.0",
+    "tqdm<5.0.0,>=4.65.0",
+]
+files = [
+    {file = "yahooquery-2.3.7-py3-none-any.whl", hash = "sha256:6b3808e515b3fa5e32cf7b72f9a13991cde7b212830879ed00851aad0b8f529e"},
+    {file = "yahooquery-2.3.7.tar.gz", hash = "sha256:edb0db22316be7b0f4cdb051c3dfacaeaafef810ace92622cf8254cf5bb81b06"},
+]
+
+[[package]]
 name = "yfinance"
-version = "0.2.33"
+version = "0.2.37"
 summary = "Download market data from Yahoo! Finance API"
 dependencies = [
     "appdirs>=1.4.4",
@@ -812,6 +842,6 @@ dependencies = [
     "requests>=2.31",
 ]
 files = [
-    {file = "yfinance-0.2.33-py2.py3-none-any.whl", hash = "sha256:2076a19ee13fb55af0ad3d5f110db3fb007409893e40464177685fc3e6d08ffd"},
-    {file = "yfinance-0.2.33.tar.gz", hash = "sha256:08aeb63a927742514098698d80f4315aa92d23bc253c1f204ced6377457c3e07"},
+    {file = "yfinance-0.2.37-py2.py3-none-any.whl", hash = "sha256:3ac75fa1cd3496ee76b6df5d63d29679487ea9447123c5b935d1593240737a8f"},
+    {file = "yfinance-0.2.37.tar.gz", hash = "sha256:e5f78c9bd27bae7abfd0af9b7996620eaa9aba759d67f957296634d7d54f0cef"},
 ]
