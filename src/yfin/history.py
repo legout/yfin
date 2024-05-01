@@ -11,6 +11,98 @@ from .constants import URLS
 from .utils.datetime import to_timestamp
 
 
+
+class RawResultParser:
+    def __init__(self, raw_result:dict):
+        self.raw_result = raw_result
+
+    def timestamp(self):
+        return list(map(pdl.from_timestamp, self.raw_result["chart"]["result"][0]["timestamp"])
+    
+
+def parse_json(result:dict)->pd.DataFrame:
+    splits = pd.DataFrame(columns=["time", "splitRatio"])
+    dividends = pd.DataFrame(columns=["time", "amount"])
+    adjclose = pd.DataFrame(columns=["adjclose"])
+    splits = pd.DataFrame(columns=["time", "splitRatio"])
+        
+    if "chart" in result:
+        res = result["chart"]["result"][0]
+
+        timestamp = list(map(pdl.from_timestamp, result["chart"]["result"][0]["timestamp"]))
+
+        ohlcv = pd.DataFrame(res["indicators"]["quote"][0])
+
+        if "adjclose" in res["indicators"]:
+            adjclose = pd.DataFrame(res["indicators"]["adjclose"][0])
+
+        if "events" in res:
+            if "splits" in res["events"]:
+
+                def splitratio_to_float(s):
+                    if isinstance(s, str):
+                        a, b = s.split(":")
+                        return int(a) / int(b)
+                    return s
+
+                splits = (
+                    pd.DataFrame(res["events"]["splits"].values())
+                    .astype({"date": "datetime64[s]"})
+                    .rename({"date": "time"}, axis=1)[["time", "splitRatio"]]
+                )
+                splits["splitRatio"] = splits["splitRatio"].apply(
+                    lambda s: splitratio_to_float(s)
+                )
+                splits["time"] = splits["time"].dt.tz_localize("UTC")
+
+            if "dividends" in res["events"]:
+                dividends = (
+                    pd.DataFrame(res["events"]["dividends"].values())
+                    .astype({"date": "datetime64[s]"})
+                    .rename({"date": "time"}, axis=1)
+                )
+                dividends["time"] = dividends["time"].dt.tz_localize("UTC")
+
+        history = (
+            pd.concat([timestamp, ohlcv, adjclose], axis=1)
+            .merge(splits, on=["time"], how="left")
+            .merge(dividends, on=["time"], how="left")
+            .fillna(0)
+        )
+
+        if adjust:
+            history[["open", "high", "low", "close"]] = (
+                history[["open", "high", "low", "close"]]
+                * (history["adjclose"] / history["close"]).values[:, None]
+            )
+        if timezone != "UTC":
+            history["time"] = history["time"].dt.tz_convert(timezone)
+        if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
+            history["time"] = history["time"].dt.date
+
+        history = history.replace({"Infinity": "inf", "-Infinity": "-inf"})
+        dtypes = {
+            k: v
+            for k, v in {
+                "symbol": str,
+                # "time": "datetime64[s]",
+                "low": float,
+                "high": float,
+                "volume": int,
+                "open": float,
+                "close": float,
+                "adjclose": float,
+                "splitRatio": float,
+                "amount": float,
+            }.items()
+            if k in history.columns
+        }
+        history = history.astype(dtypes)
+
+    else:
+        history = None
+    return history
+
 class History:
     """Yahoo Finance Hisorical OHCL Data."""
 
@@ -86,90 +178,8 @@ class History:
             pd.DataFrame | None: The fetched data as a DataFrame, or None if no data is found.
         """
 
-        def _parse(response):
-            splits = pd.DataFrame(columns=["time", "splitRatio"])
-            dividends = pd.DataFrame(columns=["time", "amount"])
-            adjclose = pd.DataFrame(columns=["adjclose"])
-            if "chart" in response:
-                res = response["chart"]["result"][0]
-
-                timestamp = (
-                    pd.Series(res["timestamp"])
-                    .apply(pd.to_datetime, unit="s", utc=True)
-                    .rename("time")
-                )
-
-                ohlcv = pd.DataFrame(res["indicators"]["quote"][0])
-
-                if "adjclose" in res["indicators"]:
-                    adjclose = pd.DataFrame(res["indicators"]["adjclose"][0])
-
-                if "events" in res:
-                    if "splits" in res["events"]:
-
-                        def splitratio_to_float(s):
-                            if isinstance(s, str):
-                                a, b = s.split(":")
-                                return int(a) / int(b)
-                            return s
-
-                        splits = (
-                            pd.DataFrame(res["events"]["splits"].values())
-                            .astype({"date": "datetime64[s]"})
-                            .rename({"date": "time"}, axis=1)[["time", "splitRatio"]]
-                        )
-                        splits["splitRatio"] = splits["splitRatio"].apply(
-                            lambda s: splitratio_to_float(s)
-                        )
-                        splits["time"] = splits["time"].dt.tz_localize("UTC")
-
-                    if "dividends" in res["events"]:
-                        dividends = (
-                            pd.DataFrame(res["events"]["dividends"].values())
-                            .astype({"date": "datetime64[s]"})
-                            .rename({"date": "time"}, axis=1)
-                        )
-                        dividends["time"] = dividends["time"].dt.tz_localize("UTC")
-
-                history = (
-                    pd.concat([timestamp, ohlcv, adjclose], axis=1)
-                    .merge(splits, on=["time"], how="left")
-                    .merge(dividends, on=["time"], how="left")
-                    .fillna(0)
-                )
-
-                if adjust:
-                    history[["open", "high", "low", "close"]] = (
-                        history[["open", "high", "low", "close"]]
-                        * (history["adjclose"] / history["close"]).values[:, None]
-                    )
-                if timezone != "UTC":
-                    history["time"] = history["time"].dt.tz_convert(timezone)
-                if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
-                    history["time"] = history["time"].dt.date
-
-                history = history.replace({"Infinity": "inf", "-Infinity": "-inf"})
-                dtypes = {
-                    k: v
-                    for k, v in {
-                        "symbol": str,
-                        # "time": "datetime64[s]",
-                        "low": float,
-                        "high": float,
-                        "volume": int,
-                        "open": float,
-                        "close": float,
-                        "adjclose": float,
-                        "splitRatio": float,
-                        "amount": float,
-                    }.items()
-                    if k in history.columns
-                }
-                history = history.astype(dtypes)
-
-            else:
-                history = None
-            return history
+        # def _parse(response):
+        #     
 
         self._url = [self._BASE_URL + symbol for symbol in self._symbols]
 
@@ -202,49 +212,51 @@ class History:
         )
         self._params = params
         # fetch results
-        results = await self._session.request_async(
+        results = await self._session.request(
             urls=self._url,
             params=self._params,
-            parse_func=_parse,
+            #parse_func=_parse,
             keys=self._symbols,
-            return_type="json",
+            #return_type="json",
         )
 
         # combine results
-        if isinstance(results, dict):
-            not_none_results = {
-                k: results[k] for k in results if results[k] is not None
-            }
-            if not_none_results:
-                results = (
-                    pd.concat(
-                        {k: results[k] for k in results if results[k] is not None},
-                        names=["symbol"],
-                    )
-                    .reset_index()
-                    .drop("level_1", axis=1)
-                )
-                # replace
+        # if isinstance(results, dict):
+        #     not_none_results = {
+        #         k: results[k] for k in results if results[k] is not None
+        #     }
+        #     if not_none_results:
+        #         results = (
+        #             pd.concat(
+        #                 {k: results[k] for k in results if results[k] is not None},
+        #                 names=["symbol"],
+        #             )
+        #             .reset_index()
+        #             .drop("level_1", axis=1)
+        #         )
+        #         # replace
 
-                # dtypes
-                results = results[
-                    [
-                        "symbol",
-                        "time",
-                        "open",
-                        "high",
-                        "low",
-                        "close",
-                        "adjclose",
-                        "volume",
-                        "amount",
-                        "splitRatio",
-                    ]
-                ]
-            else:
-                results = None
+        #         # dtypes
+        #         results = results[
+        #             [
+        #                 "symbol",
+        #                 "time",
+        #                 "open",
+        #                 "high",
+        #                 "low",
+        #                 "close",
+        #                 "adjclose",
+        #                 "volume",
+        #                 "amount",
+        #                 "splitRatio",
+        #             ]
+        #         ]
+        #     else:
+        #         results = None
 
         self.results = results
+
+    
 
     def __call__(self, *args, **kwargs):
         asyncio.run(self.fetch(*args, **kwargs))

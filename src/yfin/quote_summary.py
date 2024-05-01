@@ -120,7 +120,7 @@ class QuoteSummary:
                 "crumb": self._session.crumb,
             }
 
-            results = await self._session.request_async(
+            results = await self._session.request(
                 urls=self._url,
                 params=params,
                 keys=self.symbols,

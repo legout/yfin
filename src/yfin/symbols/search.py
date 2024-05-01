@@ -121,7 +121,7 @@ class Search:
 
         results = []
         for i, params_ in tqdm(enumerate(params)):
-            results_ = await self._session.request_async(
+            results_ = await self._session.request(
                 urls=self._URL1,
                 params=params_,
                 keys=self._queries[i],
@@ -180,7 +180,7 @@ class Search:
 
         results = []
         for i, queries in enumerate(self._queries):
-            results_ = await self._session.request_async(
+            results_ = await self._session.request(
                 urls=urls[i],
                 params=params,
                 keys=queries,

@@ -177,21 +177,21 @@ class Quotes:
             dict(symbols=_symbols, crumb=self._session.crumb, fields=",".join(fields))
             for _symbols in self._symbol_chunks
         ]
-        results = await self._session.request_async(
+        results = await self._session.request(
             urls=self._URL,
             params=params,
-            parse_func=_parse,
+            #parse_func=_parse,
             # cookies={self._cookie.name: self._cookie.value},
-            return_type="json",
+            #return_type="json",
         )
 
-        if isinstance(results, list):
-            results = pd.concat(
-                results,
-                ignore_index=True,
-            )
-        if results is not None:
-            results.columns = [camel_to_snake(col) for col in results.columns]
+        #if isinstance(results, list):
+        #    results = pd.concat(
+        #        results,
+        #        ignore_index=True,
+        #    )
+        #if results is not None:
+        #    results.columns = [camel_to_snake(col) for col in results.columns]
 
         self.results = results
 
