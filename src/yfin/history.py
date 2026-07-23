@@ -1,368 +1,224 @@
+"""Chart history provider.
+
+Uses Yahoo ``query1.finance.yahoo.com/v8/finance/chart/{symbol}`` (one request
+per symbol). Returns deterministic ``pyarrow.Table``.
+"""
+
+from __future__ import annotations
+
 import asyncio
 import datetime as dt
+from collections.abc import Sequence
+from typing import Any
 
-import pandas as pd
-import pendulum as pdl
+import pyarrow as pa
 
-from .base import Session
-from .constants import URLS
+from .arrow import build_history_table
+from .client import YahooClient
+from .models import normalize_symbols, validate_date_range
 
-# from requests import session
-from .utils.datetime import to_timestamp
+__all__ = ["history_async", "history"]
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+_DEFAULT_EVENTS: tuple[str, ...] = ("div", "split")
 
 
+# ---------------------------------------------------------------------------
+# Parameter builder
+# ---------------------------------------------------------------------------
 
-class RawResultParser:
-    def __init__(self, raw_result:dict):
-        self.raw_result = raw_result
 
-    def timestamp(self):
-        return list(map(pdl.from_timestamp, self.raw_result["chart"]["result"][0]["timestamp"])
-    
+def build_chart_params(
+    symbol: str,
+    *,
+    start: dt.date | dt.datetime | int | None = None,
+    end: dt.date | dt.datetime | int | None = None,
+    period: str | None = None,
+    interval: str = "1d",
+    events: Sequence[str] = _DEFAULT_EVENTS,
+    include_pre_post: bool = False,
+) -> tuple[str, dict[str, Any]]:
+    """Build the chart URL and query params for *symbol*.
 
-def parse_json(result:dict)->pd.DataFrame:
-    splits = pd.DataFrame(columns=["time", "splitRatio"])
-    dividends = pd.DataFrame(columns=["time", "amount"])
-    adjclose = pd.DataFrame(columns=["adjclose"])
-    splits = pd.DataFrame(columns=["time", "splitRatio"])
-        
-    if "chart" in result:
-        res = result["chart"]["result"][0]
+    Returns ``(url, params)``. Raises :class:`YahooValidationError` on bad input.
+    """
+    date_range = validate_date_range(start, end, period, interval)
 
-        timestamp = list(map(pdl.from_timestamp, result["chart"]["result"][0]["timestamp"]))
+    params: dict[str, Any] = {
+        "interval": interval,
+        "events": ",".join(events) if events else "",
+        "includePrePost": "true" if include_pre_post else "false",
+    }
 
-        ohlcv = pd.DataFrame(res["indicators"]["quote"][0])
-
-        if "adjclose" in res["indicators"]:
-            adjclose = pd.DataFrame(res["indicators"]["adjclose"][0])
-
-        if "events" in res:
-            if "splits" in res["events"]:
-
-                def splitratio_to_float(s):
-                    if isinstance(s, str):
-                        a, b = s.split(":")
-                        return int(a) / int(b)
-                    return s
-
-                splits = (
-                    pd.DataFrame(res["events"]["splits"].values())
-                    .astype({"date": "datetime64[s]"})
-                    .rename({"date": "time"}, axis=1)[["time", "splitRatio"]]
-                )
-                splits["splitRatio"] = splits["splitRatio"].apply(
-                    lambda s: splitratio_to_float(s)
-                )
-                splits["time"] = splits["time"].dt.tz_localize("UTC")
-
-            if "dividends" in res["events"]:
-                dividends = (
-                    pd.DataFrame(res["events"]["dividends"].values())
-                    .astype({"date": "datetime64[s]"})
-                    .rename({"date": "time"}, axis=1)
-                )
-                dividends["time"] = dividends["time"].dt.tz_localize("UTC")
-
-        history = (
-            pd.concat([timestamp, ohlcv, adjclose], axis=1)
-            .merge(splits, on=["time"], how="left")
-            .merge(dividends, on=["time"], how="left")
-            .fillna(0)
-        )
-
-        if adjust:
-            history[["open", "high", "low", "close"]] = (
-                history[["open", "high", "low", "close"]]
-                * (history["adjclose"] / history["close"]).values[:, None]
-            )
-        if timezone != "UTC":
-            history["time"] = history["time"].dt.tz_convert(timezone)
-        if freq.lower() in {"1d", "5d", "1wk", "1mo", "3mo"}:
-            history["time"] = history["time"].dt.date
-
-        history = history.replace({"Infinity": "inf", "-Infinity": "-inf"})
-        dtypes = {
-            k: v
-            for k, v in {
-                "symbol": str,
-                # "time": "datetime64[s]",
-                "low": float,
-                "high": float,
-                "volume": int,
-                "open": float,
-                "close": float,
-                "adjclose": float,
-                "splitRatio": float,
-                "amount": float,
-            }.items()
-            if k in history.columns
-        }
-        history = history.astype(dtypes)
-
+    if date_range is not None:
+        p1, p2 = date_range
+        params["period1"] = str(p1)
+        params["period2"] = str(p2)
+    elif period is not None:
+        params["range"] = period
     else:
-        history = None
-    return history
+        # Default: full available history
+        params["period1"] = "0"
+        params["period2"] = str(int(dt.datetime.now(dt.UTC).timestamp()))
 
-class History:
-    """Yahoo Finance Hisorical OHCL Data."""
+    url = _CHART_URL.format(symbol=symbol)
+    return url, params
 
-    _BASE_URL = URLS["chart"]
 
-    def __init__(
-        self, symbols: str | list, session: Session | None = None, *args, **kwargs
-    ):
-        """
-        Initializes a new instance of the class.
-
-        Args:
-            symbols (str | list): The symbols to be initialized.
-            session (Session | None): The session to be used for initialization. Defaults to None.
-
-        """
-        if isinstance(symbols, str):
-            symbols = [symbols]
-
-        self._symbols = symbols
-
-        if session is None:
-            session = Session(*args, **kwargs)
-        self._session = session
-
-    async def fetch(
-        self,
-        start: (
-            str
-            | dt.datetime
-            | dt.date
-            | pd.Timestamp
-            | pdl.Date
-            | pdl.DateTime
-            | int
-            | float
-            | None
-        ) = None,
-        end: (
-            str
-            | dt.datetime
-            | dt.date
-            | pd.Timestamp
-            | pdl.Date
-            | pdl.DateTime
-            | int
-            | float
-            | None
-        ) = None,
-        period: str | None = None,
-        freq: str = "1d",
-        splits: bool = True,
-        dividends: bool = True,
-        pre_post: bool = False,
-        adjust: bool = False,
-        timezone: str = "UTC",
-    ) -> pd.DataFrame | None:
-        """
-        Fetches data from an API based on the provided parameters.
-
-        Args:
-            start (str | dt.datetime | dt.date | pd.Timestamp | pdl.Date | pdl.DateTime | int | float | None, optional): The start date or timestamp for the data. Defaults to None.
-            end (str | dt.datetime | dt.date | pd.Timestamp | pdl.Date | pdl.DateTime | int | float | None, optional): The end date or timestamp for the data. Defaults to None.
-            period (str | None, optional): The time period for the data. Defaults to None.
-            freq (str, optional): The frequency of the data. Defaults to "1d".
-            splits (bool, optional): Whether to include data on stock splits. Defaults to True.
-            dividends (bool, optional): Whether to include data on dividends. Defaults to True.
-            pre_post (bool, optional): Whether to include pre and post market data. Defaults to False.
-            adjust (bool, optional): Whether to adjust the data for stock splits. Defaults to False.
-            timezone (str, optional): The timezone for the data. Defaults to "UTC".
-
-        Returns:
-            pd.DataFrame | None: The fetched data as a DataFrame, or None if no data is found.
-        """
-
-        # def _parse(response):
-        #     
-
-        self._url = [self._BASE_URL + symbol for symbol in self._symbols]
-
-        params = {}
-        # handle period depending on given period, start, end
-        if not start and not period:
-            period = "ytd"
-
-        if start:
-            start = to_timestamp(start, timezone=timezone)
-
-            if not end:
-                end = int(pdl.now().timestamp())
-            else:
-                end = to_timestamp(end, timezone=timezone)
-
-            params = dict(period1=start, period2=end)
-
-        if period:
-            params = dict(range=period)
-
-        # set params
-        params.update(
-            dict(
-                interval=freq,
-                events=",".join(["div" * dividends, "split" * splits]),
-                close="adjusted" if adjust else "unadjusted",
-                includePrePost="true" if pre_post else "false",
-            )
-        )
-        self._params = params
-        # fetch results
-        results = await self._session.request(
-            urls=self._url,
-            params=self._params,
-            #parse_func=_parse,
-            keys=self._symbols,
-            #return_type="json",
-        )
-
-        # combine results
-        # if isinstance(results, dict):
-        #     not_none_results = {
-        #         k: results[k] for k in results if results[k] is not None
-        #     }
-        #     if not_none_results:
-        #         results = (
-        #             pd.concat(
-        #                 {k: results[k] for k in results if results[k] is not None},
-        #                 names=["symbol"],
-        #             )
-        #             .reset_index()
-        #             .drop("level_1", axis=1)
-        #         )
-        #         # replace
-
-        #         # dtypes
-        #         results = results[
-        #             [
-        #                 "symbol",
-        #                 "time",
-        #                 "open",
-        #                 "high",
-        #                 "low",
-        #                 "close",
-        #                 "adjclose",
-        #                 "volume",
-        #                 "amount",
-        #                 "splitRatio",
-        #             ]
-        #         ]
-        #     else:
-        #         results = None
-
-        self.results = results
-
-    
-
-    def __call__(self, *args, **kwargs):
-        asyncio.run(self.fetch(*args, **kwargs))
-        return self.results
+# ---------------------------------------------------------------------------
+# Async API
+# ---------------------------------------------------------------------------
 
 
 async def history_async(
-    symbols: str | list,
-    start: str | dt.datetime | None = None,
-    end: str | dt.datetime | None = None,
+    symbols: str | list[str] | tuple[str, ...],
+    *,
+    start: dt.date | dt.datetime | int | None = None,
+    end: dt.date | dt.datetime | int | None = None,
     period: str | None = None,
-    freq: str = "1d",
-    splits: bool = True,
-    dividends: bool = True,
-    pre_post: bool = True,
-    adjust: bool = False,
-    timezone: str = "UTC",
-    session: Session | None = None,
-    *args,
-    **kwargs,
-) -> pd.DataFrame:
+    interval: str = "1d",
+    events: Sequence[str] = _DEFAULT_EVENTS,
+    include_pre_post: bool = False,
+    client: YahooClient | None = None,
+    proxy: str | None = None,
+) -> pa.Table:
+    """Fetch historical OHLCV data and return a deterministic Arrow table.
+
+    Parameters
+    ----------
+    symbols
+        One or more ticker symbols. Normalised, de-duplicated, order-preserved.
+    start / end
+        Date range as ``datetime.date``, ``datetime.datetime``, or epoch seconds.
+        Cannot be combined with ``period``.
+    period
+        Yahoo range string (e.g. ``"1y"``, ``"max"``). Cannot be combined
+        with explicit dates.
+    interval
+        Bar interval (default ``"1d"``).
+    events
+        Event types to include (default ``("div", "split")``).
+    include_pre_post
+        Include pre/post market data (default ``False``).
+    client
+        Reuse an existing :class:`YahooClient`.
+    proxy
+        Optional proxy URL for this request's route.
     """
-    Fetches the historical data for the given symbols.
+    normalised = normalize_symbols(symbols)
+    own_client = client is None
+    if own_client:
+        client = YahooClient(proxies=[proxy] if proxy else None)
 
-    Args:
-        symbols (str | list): The symbols for which to fetch historical data.
-        start (str | dt.datetime | None, optional): The start date or datetime for the historical data. Defaults to None.
-        end (str | dt.datetime | None, optional): The end date or datetime for the historical data. Defaults to None.
-        period (str | None, optional): The period of the historical data. Defaults to None.
-        freq (str, optional): The frequency of the historical data. Defaults to "1d".
-        splits (bool, optional): Whether to include splits in the historical data. Defaults to True.
-        dividends (bool, optional): Whether to include dividends in the historical data. Defaults to True.
-        pre_post (bool, optional): Whether to include pre and post market data in the historical data. Defaults to True.
-        adjust (bool, optional): Whether to adjust the historical data for dividends and splits. Defaults to False.
-        timezone (str, optional): The timezone for the historical data. Defaults to "UTC".
-        session (Session | None, optional): The session to use for the historical data. Defaults to None.
+    route = client.get_route(proxy)
 
-    Returns:
-        pd.DataFrame: The historical data for the given symbols.
-    """
+    try:
+        tasks = [
+            _fetch_one(
+                client,
+                symbol,
+                route,
+                start=start,
+                end=end,
+                period=period,
+                interval=interval,
+                events=events,
+                include_pre_post=include_pre_post,
+            )
+            for symbol in normalised
+        ]
+        tables = await asyncio.gather(*tasks)
 
-    h = History(symbols=symbols, session=session, *args, **kwargs)
-    await h.fetch(
-        start=start,
-        end=end,
-        period=period,
-        freq=freq,
-        splits=splits,
-        dividends=dividends,
-        pre_post=pre_post,
-        adjust=adjust,
-        timezone=timezone,
-    )
-    return h.results
+        if not tables:
+            from .models import HISTORY_SCHEMA
+
+            arrays = [pa.array([], type=field.type) for field in HISTORY_SCHEMA]
+            return pa.table(arrays, schema=HISTORY_SCHEMA)
+
+        return pa.concat_tables(tables)
+    finally:
+        if own_client:
+            await client.close()
+
+
+async def _fetch_one(
+    client: YahooClient,
+    symbol: str,
+    route: Any,
+    **kwargs: Any,
+) -> pa.Table:
+    """Fetch and parse chart data for a single symbol."""
+    url, params = build_chart_params(symbol, **kwargs)
+    resp = await client.get_json(url, params=params, route=route)
+    chart_result = _extract_chart_result(resp, symbol)
+    return build_history_table(symbol, chart_result)
+
+
+def _extract_chart_result(resp: Any, symbol: str) -> dict[str, Any] | None:
+    """Extract ``chart.result[0]`` from a Yahoo v8 response."""
+    if not isinstance(resp, dict):
+        return None
+    chart = resp.get("chart")
+    if not isinstance(chart, dict):
+        return None
+
+    # Check for chart-level error
+    error = chart.get("error")
+    if isinstance(error, dict):
+        from .exceptions import YahooApiError
+
+        code = error.get("code", "Unknown")
+        description = error.get("description", "")
+        msg = f"{code}: {description}" if description else str(code)
+        raise YahooApiError(f"Yahoo chart error for {symbol}: {msg}")
+
+    result = chart.get("result")
+    if not isinstance(result, list) or not result:
+        return None
+    first = result[0]
+    if not isinstance(first, dict):
+        return None
+    return first
+
+
+# ---------------------------------------------------------------------------
+# Sync wrapper
+# ---------------------------------------------------------------------------
 
 
 def history(
-    symbols: str | list,
-    start: str | dt.datetime | None = None,
-    end: str | dt.datetime | None = None,
+    symbols: str | list[str] | tuple[str, ...],
+    *,
+    start: dt.date | dt.datetime | int | None = None,
+    end: dt.date | dt.datetime | int | None = None,
     period: str | None = None,
-    freq: str = "1d",
-    splits: bool = True,
-    dividends: bool = True,
-    pre_post: bool = True,
-    adjust: bool = False,
-    timezone: str = "UTC",
-    session: Session | None = None,
-    *args,
-    **kwargs,
-) -> pd.DataFrame:
+    interval: str = "1d",
+    events: Sequence[str] = _DEFAULT_EVENTS,
+    include_pre_post: bool = False,
+    client: YahooClient | None = None,
+    proxy: str | None = None,
+) -> pa.Table:
+    """Synchronous wrapper for :func:`history_async`.
+
+    Raises :class:`RuntimeError` when called inside a running event loop.
     """
-    Get historical data for the specified symbols.
+    from .quotes import _assert_no_running_loop
 
-    Args:
-        symbols (str | list): The symbols for which to retrieve historical data.
-        start (str | dt.datetime | None, optional): The start date of the historical data. Defaults to None.
-        end (str | dt.datetime | None, optional): The end date of the historical data. Defaults to None.
-        period (str | None, optional): The period of the historical data. Defaults to None.
-        freq (str, optional): The frequency of the historical data. Defaults to "1d".
-        splits (bool, optional): Whether to include splits data. Defaults to True.
-        dividends (bool, optional): Whether to include dividends data. Defaults to True.
-        pre_post (bool, optional): Whether to include pre and post market data. Defaults to True.
-        adjust (bool, optional): Whether to adjust the data for dividends and splits. Defaults to False.
-        timezone (str, optional): The timezone to use for the timestamps. Defaults to "UTC".
-        session (Session | None, optional): The session to use for the request. Defaults to None.
-        *args: Additional positional arguments.
-        **kwargs: Additional keyword arguments.
-
-    Returns:
-        pd.DataFrame: The historical data for the specified symbols.
-    """
-
+    _assert_no_running_loop()
     return asyncio.run(
         history_async(
-            symbols=symbols,
+            symbols,
             start=start,
             end=end,
             period=period,
-            freq=freq,
-            splits=splits,
-            dividends=dividends,
-            pre_post=pre_post,
-            adjust=adjust,
-            timezone=timezone,
-            *args,
-            **kwargs,
+            interval=interval,
+            events=events,
+            include_pre_post=include_pre_post,
+            client=client,
+            proxy=proxy,
         )
     )
