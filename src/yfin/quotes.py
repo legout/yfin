@@ -1,264 +1,208 @@
+"""Batch quote provider.
+
+Uses Yahoo ``query1.finance.yahoo.com/v7/finance/quote`` with bounded
+comma-separated symbol chunks. Returns deterministic ``pyarrow.Table``.
+"""
+
+from __future__ import annotations
+
 import asyncio
+import urllib.parse
+from collections.abc import Sequence
+from typing import Any, Protocol, runtime_checkable
 
-import pandas as pd
+import pyarrow as pa
 
-from .base import Session
-from .constants import URLS
-from .utils.base import camel_to_snake
+from .arrow import build_quote_table
+from .client import YahooClient
+from .models import YahooRoute, normalize_symbols
+
+__all__ = ["quotes_async", "quotes", "QuoteClient"]
+
+# ---------------------------------------------------------------------------
+# Protocol for injectable clients (enables testing with fakes)
+# ---------------------------------------------------------------------------
 
 
-class Quotes:
-    _URL = URLS["quotes"]
-    _drop_columns = [
-        "language",
-        "region",
-        # "typeDisp",
-        "customPriceAlertConfidence",
-        "triggerable",
-        # "longName",
-        "quoteSourceName",
-        "messageBoardId",
-        "esgPopulated",
-        # "exchangeTimezoneShortName",
-        "gmtOffSetMilliseconds",
-        "sourceInterval",
-        "tradeable",
-        "priceHint",
-        "fiftyTwoWeekRange",
-        # "underlyingSymbol",
-        "openInterest",
-    ]
-    _date_columns = [
-        "firstTradeDateMilliseconds",
-        "regularMarketTime",
-        "earningsTimestamp",
-        "earningsTimestampStart",
-        "earningsTimestampEnd",
-        "newListingDate",
-        "exchangeTransferDate",
-        "dividendDate",
-        "ipoExpectedDate",
-        "postMarketTime",
-        "preMarketTime",
-    ]
-    all_fields = [
-        "ask",
-        "askSize",
-        "averageAnalystRating",
-        "averageDailyVolume10Day",
-        "averageDailyVolume3Month",
-        "bid",
-        "bidSize",
-        "bookValue",
-        "currency",
-        "corporateActions",
-        "displayName",
-        "dividendDate",
-        "dividendRate",
-        "dividendYield",
-        "earningsTimestamp",
-        "earningsTimestampEnd",
-        "earningsTimestampStart",
-        "epsCurrentYear",
-        "epsForward",
-        "epsTrailingTwelveMonths",
-        "fiftyDayAverage",
-        "fiftyDayAverageChange",
-        "fiftyDayAverageChangePercent",
-        "fiftyTwoWeekHigh",
-        "fiftyTwoWeekHighChange",
-        "fiftyTwoWeekHighChangePercent",
-        "fiftyTwoWeekLow",
-        "fiftyTwoWeekLowChange",
-        "fiftyTwoWeekLowChangePercent",
-        "fiftyTwoWeekRange",
-        "financialCurrency",
-        "forwardPE",
-        "longName",
-        "marketCap",
-        "messageBoardId",
-        "preMarketChange",
-        "preMarketChangePercent",
-        "preMarketPrice",
-        "preMarketTime",
-        "postMarketChange",
-        "postMarketChangePercent",
-        "postMarketPrice",
-        "postMarketTime",
-        "priceEpsCurrentYear",
-        "priceToBook",
-        "quantity",
-        "regularMarketChange",
-        "regularMarketChangePercent",
-        "regularMarketDayHigh",
-        "regularMarketDayLow",
-        "regularMarketDayRange",
-        "regularMarketOpen",
-        "regularMarketPreviousClose",
-        "regularMarketVolume",
-        "sharesOutstanding",
-        "shortName",
-        "trailingAnnualDividendRate",
-        "trailingAnnualDividendYield",
-        "trailingPE",
-        "twoHundredDayAverage",
-        "twoHundredDayAverageChange",
-        "twoHundredDayAverageChangePercent",
-    ]
+@runtime_checkable
+class QuoteClient(Protocol):
+    """Minimal interface a quote/history client must satisfy."""
 
-    def __init__(
+    def get_route(self, proxy: str | None = None) -> YahooRoute: ...
+
+    async def get_json(
         self,
-        symbols: str | list | tuple,
-        session: Session | None = None,
-        *args,
-        **kwargs,
-    ):
-        if isinstance(symbols, str):
-            symbols = [symbols]
-        self._symbols = symbols
+        url: str,
+        params: dict[str, Any] | None = None,
+        route: YahooRoute | None = None,
+    ) -> Any: ...
 
-        if session is None:
-            session = Session(*args, **kwargs)
-        self._session = session
+    async def close(self) -> None: ...
 
-    async def fetch(
-        self,
-        symbols: str | list | tuple = None,
-        chunk_size: int = 1500,
-        fields: list | None = None,
-    ) -> pd.DataFrame:
-        """
-        Fetches quotes for the given symbols and returns it as a pandas DataFrame.
 
-        Args:
-            symbols (str | list | tuple, optional): The symbols to fetch data for. Defaults to None.
-            chunk_size (int, optional): The size of each chunk of symbols to fetch. Defaults to 1500.
-            fields (list, optional): The fields to fetch for each symbol. Defaults to None.
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 
-        Returns:
-            pd.DataFrame: The fetched data as a pandas DataFrame.
-        """
+_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
+DEFAULT_CHUNK_SIZE = 200
+MAX_URL_LENGTH = 8000  # conservative URL length guard
 
-        def _parse(response: object) -> pd.DataFrame:
-            df = pd.DataFrame(response["quoteResponse"]["result"])
 
-            dates = dict.fromkeys(
-                [date for date in self._date_columns if date in df.columns],
-                "datetime64[s]",
-            )
-            if "firstTradeDateMilliseconds" in dates:
-                dates.update({"firstTradeDateMilliseconds": "datetime64[ms]"})
-            df = df.drop(
-                [col for col in self._drop_columns if col in df.columns], axis=1
-            )
+# ---------------------------------------------------------------------------
+# Chunking
+# ---------------------------------------------------------------------------
 
-            return df.astype(dates)
 
-        def _chunk_symbols(symbols: list, chunk_size: int = 1500) -> list:
-            chunked_symbols = [
-                ",".join(symbols[i * chunk_size : (i + 1) * chunk_size])
-                for i in range(len(symbols) // chunk_size + 1)
-            ]
-            chunked_symbols = [cs for cs in chunked_symbols if len(cs) > 0]
+def chunk_symbols(
+    symbols: list[str],
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+) -> list[list[str]]:
+    """Split *symbols* into URL-safe chunks respecting both count and URL size.
 
-            return chunked_symbols
+    Each chunk becomes a comma-separated ``symbols`` query parameter. We guard
+    against the total URL exceeding :data:`MAX_URL_LENGTH`.
+    """
+    if chunk_size < 1:
+        raise ValueError(f"chunk_size must be >= 1, got {chunk_size}")
 
-        if symbols is not None:
-            if isinstance(symbols, str):
-                symbols = [symbols]
-            self._symbols = symbols
+    chunks: list[list[str]] = []
+    current: list[str] = []
+    current_len = 0
 
-        self._symbol_chunks = _chunk_symbols(
-            symbols=self._symbols, chunk_size=chunk_size
-        )
-        fields = self.all_fields if fields is None else fields
+    for sym in symbols:
+        # +1 for comma separator (or the param key prefix for the first)
+        sep = 1 if current else len("symbols=")
+        encoded_len = len(urllib.parse.quote(sym, safe="")) + sep
+        if current and (len(current) >= chunk_size or current_len + encoded_len > MAX_URL_LENGTH):
+            chunks.append(current)
+            current = []
+            current_len = 0
+        current.append(sym)
+        current_len += encoded_len
 
-        params = [
-            dict(symbols=_symbols, crumb=self._session.crumb, fields=",".join(fields))
-            for _symbols in self._symbol_chunks
-        ]
-        results = await self._session.request(
-            urls=self._URL,
-            params=params,
-            #parse_func=_parse,
-            # cookies={self._cookie.name: self._cookie.value},
-            #return_type="json",
-        )
+    if current:
+        chunks.append(current)
 
-        #if isinstance(results, list):
-        #    results = pd.concat(
-        #        results,
-        #        ignore_index=True,
-        #    )
-        #if results is not None:
-        #    results.columns = [camel_to_snake(col) for col in results.columns]
+    return chunks
 
-        self.results = results
 
-    def __call__(self, *args, **kwargs):
-        asyncio.run(self.fetch(*args, **kwargs))
-        return self.results
+# ---------------------------------------------------------------------------
+# Async API
+# ---------------------------------------------------------------------------
 
 
 async def quotes_async(
-    symbols: str | list,
-    chunk_size: int = 1000,
-    fields: list | None = None,
-    session: Session | None = None,
-    *args,
-    **kwargs,
-) -> pd.DataFrame:
+    symbols: str | list[str] | tuple[str, ...],
+    *,
+    fields: Sequence[str] | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    client: QuoteClient | None = None,
+    proxy: str | None = None,
+) -> pa.Table:
+    """Fetch batch quotes and return a deterministic Arrow table.
+
+    Parameters
+    ----------
+    symbols
+        One or more ticker symbols. Normalised, de-duplicated, order-preserved.
+    fields
+        Yahoo quote fields in camelCase (e.g. ``["regularMarketPrice"]``).
+        When ``None``, all fields Yahoo returns are included.
+    chunk_size
+        Maximum symbols per request (default 200).
+    client
+        Reuse an existing :class:`YahooClient` (e.g. for proxy pools). A new
+        transient client is created when omitted.
+    proxy
+        Optional proxy URL for this request's route.
     """
-    Asynchronously fetches quotes for the given symbols.
+    normalised = normalize_symbols(symbols)
+    own_client = client is None
+    if own_client:
+        client = YahooClient(proxies=[proxy] if proxy else None)
 
-    Parameters:
-        symbols (str | list): The symbols for which to fetch quotes.
-        chunk_size (int, optional): The number of quotes to fetch per request. Defaults to 1000.
-        fields (list | None, optional): The fields to include in the quotes. Defaults to None.
-        session (Session | None, optional): The session to use for the requests. Defaults to None.
-        *args: Additional positional arguments.
-        **kwargs: Additional keyword arguments.
+    try:
+        chunks = chunk_symbols(normalised, chunk_size)
+        all_results: list[dict[str, Any]] = []
 
-    Returns:
-        pd.DataFrame: A DataFrame containing the fetched quotes.
-    """
+        tasks = [
+            client.get_json(
+                _QUOTE_URL,
+                params={
+                    "symbols": ",".join(chunk),
+                    **_fields_params(fields),
+                },
+                route=client.get_route(proxy),
+            )
+            for chunk in chunks
+        ]
+        responses = await asyncio.gather(*tasks)
 
-    q = Quotes(symbols=symbols, session=session, *args, **kwargs)
-    await q.fetch(chunk_size=chunk_size, fields=fields)
+        for resp in responses:
+            results = _extract_quote_results(resp)
+            all_results.extend(results)
 
-    return q.results
+        return build_quote_table(all_results, fields=fields, requested_symbols=normalised)
+    finally:
+        if own_client:
+            await client.close()
+
+
+def _fields_params(fields: Sequence[str] | None) -> dict[str, str]:
+    if fields is None:
+        return {}
+    return {"fields": ",".join(fields)}
+
+
+def _extract_quote_results(resp: Any) -> list[dict[str, Any]]:
+    """Extract the result list from a Yahoo v7 quote response."""
+    if not isinstance(resp, dict):
+        return []
+    quote_response = resp.get("quoteResponse")
+    if not isinstance(quote_response, dict):
+        return []
+    result = quote_response.get("result")
+    if not isinstance(result, list):
+        return []
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Sync wrapper
+# ---------------------------------------------------------------------------
 
 
 def quotes(
-    symbols: str | list,
-    chunk_size: int = 1000,
-    fields: list | None = None,
-    session: Session | None = None,
-    *args,
-    **kwargs,
-) -> pd.DataFrame:
+    symbols: str | list[str] | tuple[str, ...],
+    *,
+    fields: Sequence[str] | None = None,
+    chunk_size: int = DEFAULT_CHUNK_SIZE,
+    client: QuoteClient | None = None,
+    proxy: str | None = None,
+) -> pa.Table:
+    """Synchronous wrapper for :func:`quotes_async`.
+
+    Raises :class:`RuntimeError` when called inside a running event loop.
     """
-    Generates a pandas DataFrame of quotes for the given symbols.
-
-    Args:
-        symbols (str | list): The symbols for which to retrieve quotes.
-        chunk_size (int, optional): The size of each chunk of symbols to retrieve quotes for. Defaults to 1000.
-        fields (list | None, optional): The fields to include in the quotes DataFrame. Defaults to None.
-        session (Session | None, optional): The optional session to use for the quotes request. Defaults to None.
-        *args: Additional positional arguments.
-        **kwargs: Additional keyword arguments.
-
-    Returns:
-        pd.DataFrame: A pandas DataFrame containing the quotes for the given symbols.
-    """
-
+    _assert_no_running_loop()
     return asyncio.run(
         quotes_async(
-            symbols=symbols,
-            chunk_size=chunk_size,
-            session=session,
+            symbols,
             fields=fields,
-            *args,
-            **kwargs,
+            chunk_size=chunk_size,
+            client=client,
+            proxy=proxy,
         )
+    )
+
+
+def _assert_no_running_loop() -> None:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return  # No running loop — safe to call asyncio.run()
+    raise RuntimeError(
+        "yfin sync wrappers must not be called from a running event loop. "
+        "Use the async variant (quotes_async) instead."
     )

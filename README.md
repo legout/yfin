@@ -1,218 +1,175 @@
-# yFin - A blazing fast python wrapper for the Yahoo Fincance API
+# yfin
 
-Yfin is yet another python wrapper for the Yahoo Finance API. 
+Compact Python 3.14 Yahoo Finance client returning `pyarrow.Table`, built on
+[fastreq](https://github.com/legout/fastreq).
 
-By using asyncronous coroutines the http requests are performed in parallel and downloading data is blazing fast. Additionally, to avoid yahoo finance rate limiting, you can use random proxies. 
- 
-For every function an async version is available. e.g. for downloading hisorical data there is the function `history` and `history_async`. 
+## What it does
 
-This python library currently has functions to download
- - historical OHLCV data
- - fundamental data
- - quotes
- - symbol search
+- **Batch quotes** via `query1.finance.yahoo.com/v7/finance/quote`
+- **Chart history** (OHLCV + dividends + splits) via `query1.finance.yahoo.com/v8/finance/chart/{symbol}`
+- Deterministic **pyarrow.Table** output with explicit schemas
+- Optional **Polars** conversion via the `polars` extra
+- Async and sync APIs; sync wrappers fail clearly inside a running event loop
+- Two-strategy Yahoo cookie/crumb authentication (basic + CSRF fallback)
+- Per-proxy-route cookie/crumb isolation (no state leakage between proxies)
+
+## What it does NOT do
+
+- No pandas, numpy, yfinance, yahooquery, requests, pendulum, or lxml
+- No quote summaries, company fundamentals, symbol search, or options
+- No free proxies or bypass/aggressive behavior
+- No compatibility layer for the legacy yfin API
 
 ## Installation
+
+```bash
+pip install yfin            # core (pyarrow output)
+pip install 'yfin[polars]'  # with Polars conversion
 ```
-pip install git+https://github.com/legout/yfin.git
+
+### Release sequencing (important)
+
+yfin 1.0 depends on `fastreq>=3.0.0`. If fastreq 3.0.0 is not yet available
+on your package index, install it from the local wheel first:
+
+```bash
+# Install the verified fastreq 3.0.0 wheel into your environment
+pip install /path/to/fastreq-3.0.0-py3-none-any.whl
+
+# Then install yfin (it will find fastreq already satisfied)
+pip install yfin
+```
+
+For development with `uv`, do NOT commit an absolute local path or file URL
+to `pyproject.toml`. Instead, install the wheel into the project venv:
+
+```bash
+uv venv --python 3.14 .venv
+source .venv/bin/activate
+uv pip install /path/to/fastreq-3.0.0-py3-none-any.whl
+uv pip install -e . --no-deps
 ```
 
 ## Usage
 
-[Example Notebook](examples/examples.ipynb)
+```python
+import yfin
+
+# Batch quotes
+quotes = yfin.quotes(
+    ["AAPL", "MSFT"],
+    fields=["regularMarketPrice", "regularMarketVolume", "currency"],
+)
+# pyarrow.Table: symbol, regular_market_price, regular_market_volume, currency
+
+# Historical OHLCV
+from datetime import date
+
+history = yfin.history(
+    ["AAPL", "MSFT"],
+    start=date(2024, 1, 1),
+    end=date(2024, 6, 1),
+    interval="1d",
+)
+# pyarrow.Table: symbol, timestamp, open, high, low, close, adjusted_close,
+#                volume, dividend, split_ratio, currency, exchange_timezone
+
+# Or use a range instead of dates
+history = yfin.history(["AAPL"], period="1y")
+
+# Async equivalents
+quotes = await yfin.quotes_async(["AAPL", "MSFT"])
+history = await yfin.history_async(["AAPL"], period="1y")
+
+# Optional Polars conversion (requires 'yfin[polars]')
+df = yfin.to_polars(history)
+```
+
+## Arrow schemas
+
+### History
+
+| Column             | Type                  |
+|--------------------|-----------------------|
+| `symbol`           | string                |
+| `timestamp`        | timestamp(s, UTC)     |
+| `open`             | float64               |
+| `high`             | float64               |
+| `low`              | float64               |
+| `close`            | float64               |
+| `adjusted_close`   | float64               |
+| `volume`           | int64                 |
+| `dividend`         | float64               |
+| `split_ratio`      | float64               |
+| `currency`         | string                |
+| `exchange_timezone`| string                |
+
+### Quotes
+
+Column `symbol` (string) followed by each requested Yahoo field converted from
+camelCase to snake_case, in caller order. Missing symbols get a null row;
+missing field values are null. When `fields=None`, all Yahoo-returned keys are
+included as snake_case columns.
+
+## Cookie and crumb authentication
+
+yfin adapts Yahoo's two-strategy authentication model (no yfinance dependency):
+
+1. **Basic strategy**: GET `fc.yahoo.com` for a cookie, then GET
+   `query1.finance.yahoo.com/v1/test/getcrumb` for a crumb.
+2. **CSRF fallback**: GET `guce.yahoo.com/consent`, parse hidden form fields
+   with stdlib `html.parser`, POST consent, GET `copyConsent`, then GET the
+   crumb from `query2.finance.yahoo.com`.
+
+On crumb-invalid errors or HTTP 429, the crumb is cleared and the strategy
+switches once (basic → CSRF). Blank, HTML, and too-short crumbs are treated as
+typed failures.
+
+Each network route (direct or a specific proxy URL) maintains independent
+cookie/crumb state. A crumb obtained through one proxy is never sent through
+another.
+
+## Proxy policy
+
+yfin uses fastreq's explicit proxy transport support. It chooses configured
+proxies round-robin as explicit Yahoo routes so that cookie/crumb state remains
+bound to the proxy that obtained it. No free proxies are used or offered.
+Configure proxies explicitly:
 
 ```python
-import datetime as dt
-import pandas as pd
-
-# Use nest_asyncio, when you are in a jupyter notebook/lab
-import nest_asyncio
-nest_asyncio.apply()
-```
-#### 1. Hisorical OHLCV data
-
-Historical data can be downloaded for in several symbols in parallel. The number of symbols is limited to around 1000 if you do not use random proxies.
- 
-The time range can be set by using the parameters `start` and `end`. Both are timestamps, which can be defined as a string (e.g. `'2022-01-01'` or `'20220101'`) or a `datetime` object (e.g. `datetime.datetime(2022,1,1)`). If `end=None`, today is used as the end timestamp. 
- 
-Instead of using `start` and  `end`, one can also provide the timerange with the parameter  `period`. Valid optionsare  `1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, 10y, 25y, ytd, max`.
- 
-The parameter `freq` defines the interval between two data points. Valid options are `1m, 2m, 5m, 15m, 30m, 60m, 90m, 1h, 1d, 5d, 1wk, 1mo, 3mo`.
-
-```python
-from yfin.history import history, history_async
-
-# list of symbols can be of any size. Any valid yahoo symbol is supported. Symbols are available for this types: 
-# equity, etf, mutualfund, futures, currency, cryptocurrency, index
-
-symbols = ["AAPL", "SF.ST", "DAX", "EUR=X", "BTC-USD", "HOH25.NYM", "0P00000WCP", "^SPX"] 
-
-# sync function. wraps the async function called with asyncio.run
-data = history(symbols=symbols, start=dt.datetime(2022,1,1), end=dt.datetime.now(), freq="1d")
-
-# async function
-data = await history_async(symbols=symbols, start='20220101', end=None, freq="1d")
+client = yfin.YahooClient(proxies=["http://proxy1:8080", "http://proxy2:8080"])
+quotes = await yfin.quotes_async(["AAPL"], client=client)
 ```
 
-#### 2. Quote Summary
-#
-The python class `QuoteSummary` is used to get all the data available on yahoo finance for a specific financial asset. Most of the following properties are only valid for symbols of type equity (stocks).
+## Unofficial endpoints
 
-Following properties are available:
- 
- - assetProfile
- - balanceSheetHistory
- - balanceSheetHistoryQuarterly
- - calendarEvents
- - cashflowStatementHistory
- - cashflowStatementHistoryQuarterly
- - defaultKeyStatistics
- - earnings
- - earningsHistory
- - earningsTrend
- - esgScores
- - financialData
- - fundOwnership
- - fundPerformance
- - fundProfile
- - indexTrend
- - incomeStatementHistory
- - incomeStatementHistoryQuarterly
- - industryTrend
- - insiderHolders
- - insiderTransactions
- - institutionOwnership
- - majorHoldersBreakdown
- - pageViews
- - price
- - quoteType
- - recommendationTrend
- - secFilings
- - netSharePurchaseActivity
- - sectorTrend
- - summaryDetail
- - summaryProfile
- - topHoldings
- - upgradeDowngradeHistory
+yfin uses unofficial Yahoo Finance endpoints. These endpoints are not
+documented, not guaranteed stable, and may change without notice. yfin
+implements conservative pacing and retry behaviour to minimise the risk of
+rate-limiting, but cannot guarantee availability.
 
-```python
-from yfin.quote_summary import QuoteSummary
+## Testing
 
-qs = QuoteSummary(symbols=["AAPL", "NET", "VOW.DE", "SF.ST"])
+All tests are hermetic (no network access required):
 
-# use `fetch` to get the data for the given modules.
-res = await qs.fetch(modules=["upgradeDowngradeHistory", "insider_holders"]) # you can use camel or snake case for the property names
-
-# Use class properties 
-# Summary Profile
-pd.DataFrame(qs.summary_profile)
-
-# Default Key Stats
-pd.concat(qs.default_key_statistics).unstack()
-
-# Income Statement
-pd.concat(qs.income_statement_history)
-
-# async function for earnings_history 
-pd.concat(await qs.earnings_history_async())
+```bash
+uv run pytest -q
 ```
 
-#### 3. Symbol Search
+A live Yahoo smoke test is available but opt-in only (never required for test
+success):
 
-**Classic symbol search**
-
- Yahoo fincane offers two different symbol search endpoints which are available in yFin in the the function `search` (or its async equivalent `search_async`).
- 
-By using the parameter `search_assist` one can switch between the two endpoints, whereas `search_assist=1` uses the endpoint, which is used in the search bar on [finance.yahoo.com](finance.yahoo.com).
-The search query can be an asset name, or its symbol. Results are limited to 6 and 10 for `search_assist=1` and `search_assist=2`, respectively.
-
-```python
-from yfin.symbols import search
-
-search("Volkswagen", search_assist=1) # search_assist=1 is the default
-search("Volkswagen", search_assist=2)
+```bash
+YFIN_LIVE_SMOKE=1 uv run pytest tests/test_live_smoke.py -q
 ```
 
-**Lookup symbol search**
+## Migration from legacy yfin
 
-Additionally, a lookup endpoint is included in yFin, which can also be used for searching symbols. This endpoints gives up to 10000 results for a search query, but is less accurate than the classic symbol search functions. It is also possible to search for (a) specific asset type(s) and most important, it seems that there isn´t any rate limiting for this endpoint. 
- 
-Therefore this function is especially useful to get (nearly) all available symbols for (a) specific asset type(s). :-)  This is exactly what I am doing in my other yahoo finance related python module [yahoo symbols](https://github.com/legout/yahoo-symbols).
+This is a clean rewrite. The legacy API (`QuoteSummary`, `Search`, `Lookup`,
+`validate`, pandas DataFrames) has been removed. Key changes:
 
-```python
-from yfin.symbols import lookup_search
-
-lookup_search("btc", type_="cryptocurrency")
-```
-
-
-#
-
-## Use of a random proxy server.
-
-**Note** The library should work fine without using random proxies, but the number of requests is limited to ~1000/h. Using random proxies might be illegal.
-
-You can set `random-proxy=True` in any of the yFin functions. By default this uses free proxies*. In my experience, these proxies are not reliable, but maybe you are lucky.
-
-It is also possible to provide a list or `proxies` as a parameter in every yFin function. 
-
-```python
-from yfin import history
-from yfin.utils.proxy import get_free_proxy_list
-
-data = history("AAPL", random_proxy=True)
-
-proxies = ["http://proxy.one.com", "https://proxy.town.com"]
-# or get free proxies. Note: These proxies are not very reliable
-# proxies = get_free_proxy_list()
-
-data = history("AAPL", proxies=proxies)
-```
-
-### Webshare.io proxies
-
-I am using proxies from [webshare.io](https://www.webshare.io/). I am very happy with their service and the pricing. If you wanna use their service too, sign up (use the [this link](https://www.webshare.io/?referral_code=upb7xtsy39kl) if you wanna support my work) and choose a plan that fits your needs. In the next step, go to Dashboard -> Proxy -> List -> Download and copy the download link. Set this download link as an environment variable `WEBSHARE_PROXIES_URL`  before importing any yFin function. 
-
-*Export WEBSHARE_PROXIES_URL in your linux shell*
-```
-$ export WEBSHARE_PROXIES_URL="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/"
-```
-
-You can also set this environment variable permanently in an `.env` file (see the `.env-exmaple`) in your home folder or current folder or in your command line config file (e.g. `~/.bashrc`).
-
-*Write WEBSHARE_PROXIES_URL into .env*
-```
-WEBSHARE_PROXIES_URL="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/"
-```
-
-*or write WEBSHARE_PROXIES_URL into your shell config file (e.g. ~/.bashrc)*
-```
-$ echo 'export WEBSHARE_PROXIES_URL="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/"' >> ~/.bashrc
-```
-
-The last option is to set your `WEBSHARE_PROXIES_URL` within your python code. **Note** It is neccessary to do before importing any other yFin function.
-
-```python
-from yfin.utils.proxy import set_webshare_proxies_url
-
-set_webshare_proxies_url(url="https://proxy.webshare.io/api/v2/proxy/list/download/abcdefg1234567/-/any/username/direct/-/")
-```
-
-
-
-*Free Proxies are scraped from here:
-- "http://www.free-proxy-list.net"
-- "https://free-proxy-list.net/anonymous-proxy.html"
-- "https://www.us-proxy.org/"
-- "https://free-proxy-list.net/uk-proxy.html"
-- "https://www.sslproxies.org/"
-
-
-<hr>
-
-#### Support my work :-)
-
-If you find this useful, you can buy me a coffee. Thanks!
-
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W0ACJPB)
-
+- Output is `pyarrow.Table`, not `pandas.DataFrame`
+- `history()` uses `interval=` (not `freq=`) and `events=` (not `splits=`/`dividends=`)
+- No `QuoteSummary`, symbol search, or lookup endpoints
+- No free proxy scraping
+- No `pendulum`, `lxml`, `numpy`, `pandas`, `yfinance`, or `parallel-requests`
