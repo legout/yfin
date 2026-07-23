@@ -14,7 +14,7 @@ import pytest
 
 from yfin.arrow import build_quote_table, to_polars
 from yfin.exceptions import YahooApiError
-from yfin.models import camel_to_snake
+from yfin.models import YahooRoute, camel_to_snake
 
 # ---------------------------------------------------------------------------
 # Yahoo v7 quote fixtures
@@ -200,9 +200,7 @@ class _MockYahooClient:
         self._proxy = proxy
         self.closed = False
 
-    def get_route(self, proxy: str | None = None) -> "object":
-        from yfin.models import YahooRoute
-
+    def get_route(self, proxy: str | None = None) -> YahooRoute:
         return YahooRoute(proxy=proxy or "")
 
     async def get_json(self, url: str, params: dict | None = None, route=None) -> dict | list:
@@ -218,9 +216,7 @@ class _ErrorMockYahooClient:
     def __init__(self, error: Exception) -> None:
         self._error = error
 
-    def get_route(self, proxy: str | None = None) -> "object":
-        from yfin.models import YahooRoute
-
+    def get_route(self, proxy: str | None = None) -> YahooRoute:
         return YahooRoute(proxy=proxy or "")
 
     async def get_json(self, url: str, params: dict | None = None, route=None) -> dict:
