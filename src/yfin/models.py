@@ -10,7 +10,7 @@ from __future__ import annotations
 import datetime as dt
 import re
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 import pyarrow as pa
 
@@ -50,7 +50,7 @@ HISTORY_SCHEMA: pa.Schema = pa.schema(
 )
 
 
-class Interval(str, Enum):
+class Interval(StrEnum):
     """Valid Yahoo chart intervals."""
 
     M1 = "1m"
@@ -68,7 +68,7 @@ class Interval(str, Enum):
     MO3 = "3mo"
 
 
-class Range(str, Enum):
+class Range(StrEnum):
     """Valid Yahoo chart ranges."""
 
     D1 = "1d"
@@ -84,7 +84,7 @@ class Range(str, Enum):
     MAX = "max"
 
 
-class QuoteFields(str, Enum):
+class QuoteFields(StrEnum):
     """Common Yahoo v7 quote field names (camelCase as Yahoo expects)."""
 
     REGULAR_MARKET_PRICE = "regularMarketPrice"
@@ -229,8 +229,10 @@ def validate_date_range(
         p1 = _to_epoch(start)
         p2 = int(dt.datetime.now(dt.UTC).timestamp())
     else:
+        # start is None; end is guaranteed non-None (the both-None case returned above).
+        assert end is not None
         p1 = 0
-        p2 = _to_epoch(end)  # type: ignore[arg-type]
+        p2 = _to_epoch(end)
 
     if p1 > p2:
         raise YahooValidationError(f"start ({p1}) must not be after end ({p2})")
@@ -299,7 +301,7 @@ class YahooRoute:
     proxy: str = ""
 
     def __str__(self) -> str:
-        return f"direct" if not self.proxy else f"proxy:{self.proxy}"
+        return "direct" if not self.proxy else f"proxy:{self.proxy}"
 
 
 def crumb_to_int_timestamps(period1: int, period2: int) -> tuple[int, int]:

@@ -7,8 +7,7 @@ retry-once-on-crumb-failure, and typed error raising.
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Callable
+import json
 from typing import Any
 
 import fastreq
@@ -62,6 +61,7 @@ class YahooClient:
             follow_redirects=follow_redirects,
             random_user_agent=random_user_agent,
             headers=headers,
+            proxies=proxies,
             **fastreq_kwargs,
         )
         # Store proxy list for route selection
@@ -101,8 +101,19 @@ class YahooClient:
         return _request
 
     def get_route(self, proxy: str | None = None) -> YahooRoute:
-        """Get a YahooRoute for a specific proxy or the default direct route."""
-        return YahooRoute(proxy=proxy or "")
+        """Return an explicit, route-stable proxy or the direct route.
+
+        Selecting a proxy here and forwarding it explicitly to fastreq keeps a
+        Yahoo cookie/crumb bound to its actual network route. A hidden
+        transport-level proxy switch would make that state unsafe to reuse.
+        """
+        if proxy is not None:
+            return YahooRoute(proxy=proxy)
+        if not self._proxies:
+            return YahooRoute()
+        selected = self._proxies[self._proxy_index % len(self._proxies)]
+        self._proxy_index += 1
+        return YahooRoute(proxy=selected)
 
     async def get_json(
         self,
@@ -149,9 +160,7 @@ class YahooClient:
         if status == 429:
             retry_after = _parse_retry_after(resp)
             self._auth.clear_crumb(route)
-            raise YahooRateLimitError(
-                f"Yahoo returned 429 for {url}", retry_after=retry_after
-            )
+            raise YahooRateLimitError(f"Yahoo returned 429 for {url}", retry_after=retry_after)
 
         # Parse JSON from response
         json_data = _get_json(resp)
@@ -160,11 +169,11 @@ class YahooClient:
         err_msg = detect_yahoo_error(json_data)
         if err_msg:
             # If it's a crumb error and we haven't switched yet, retry once.
-            if "Crumb" in err_msg or "crumb" in err_msg:
-                if self._auth.can_switch_strategy(route):
-                    self._auth.clear_crumb(route)
-                    self._auth.switch_strategy(route)
-                    return await self.get_json(url, params=params, route=route)
+            is_crumb_error = "crumb" in err_msg.lower()
+            if is_crumb_error and self._auth.can_switch_strategy(route):
+                self._auth.clear_crumb(route)
+                self._auth.switch_strategy(route)
+                return await self.get_json(url, params=params, route=route)
             raise YahooApiError(f"Yahoo API error for {url}: {err_msg}")
 
         return json_data
@@ -188,7 +197,7 @@ def _parse_retry_after(resp: Any) -> float | None:
         return None
     try:
         return float(ra)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 
@@ -198,15 +207,13 @@ def _get_json(resp: Any) -> Any:
     json_data = getattr(resp, "json_data", _MISSING)
     if json_data is not _MISSING and json_data is not None:
         return json_data
-    # Try parsing from text
-    import json
-
+    # Try parsing from text.
     text = getattr(resp, "text", None)
     if text is not None:
         try:
             return json.loads(text)
-        except (json.JSONDecodeError, ValueError):
-            raise YahooCrumbError(f"Yahoo returned non-JSON response: {text[:200]}")
+        except (json.JSONDecodeError, ValueError) as exc:
+            raise YahooCrumbError(f"Yahoo returned non-JSON response: {text[:200]}") from exc
     raise YahooError("Response has no JSON data")
 
 

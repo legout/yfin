@@ -16,10 +16,11 @@ proxy URL). Cookie/crumb state is **never** shared between routes.
 
 from __future__ import annotations
 
+import asyncio
 import html
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from html.parser import HTMLParser
 from typing import Any
 
@@ -38,9 +39,10 @@ _GETCRUMB_QUERY1 = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 _GETCRUMB_QUERY2 = "https://query2.finance.yahoo.com/v1/test/getcrumb"
 _GUCE_CONSENT = "https://guce.yahoo.com/consent"
 _GUCE_COPYCONSENT = "https://guce.yahoo.com/copyConsent"
+_CONSENT_COLLECT = "https://consent.yahoo.com/v2/collectConsent"
 
 
-class AuthStrategy(str, Enum):
+class AuthStrategy(StrEnum):
     """Authentication strategy identifiers."""
 
     BASIC = "basic"
@@ -141,6 +143,7 @@ class YahooSessionState:
     crumb: str | None = None
     strategy: AuthStrategy = AuthStrategy.BASIC
     switched: bool = field(default=False, init=False)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock, init=False, repr=False)
     """Whether the strategy has already been switched once (only one switch)."""
 
     def clear_crumb(self) -> None:
@@ -229,18 +232,19 @@ class YahooAuth:
         """
         state = self.get_state(route)
 
-        if state.has_valid_state():
-            return state
-
-        while True:
-            try:
-                await self._authenticate(state, route)
+        async with state.lock:
+            if state.has_valid_state():
                 return state
-            except YahooCrumbError:
-                if state.can_switch_strategy():
-                    state.switch_strategy()
-                    continue
-                raise
+
+            while True:
+                try:
+                    await self._authenticate(state, route)
+                    return state
+                except YahooCrumbError:
+                    if state.can_switch_strategy():
+                        state.switch_strategy()
+                        continue
+                    raise
 
     async def _authenticate(self, state: YahooSessionState, route: YahooRoute) -> None:
         if state.strategy == AuthStrategy.BASIC:
@@ -252,9 +256,7 @@ class YahooAuth:
 
     async def _basic_auth(self, state: YahooSessionState, route: YahooRoute) -> None:
         """Basic: GET fc.yahoo.com for cookie, then query1 getcrumb."""
-        resp = await self._request_func(
-            _FC_YAHOO, method="GET", route=route, follow_redirects=True
-        )
+        resp = await self._request_func(_FC_YAHOO, method="GET", route=route, follow_redirects=True)
         cookie = _extract_cookie(resp)
         if cookie:
             state.cookie = cookie
@@ -283,13 +285,25 @@ class YahooAuth:
 
         consent_html = _extract_text(consent_resp)
         form_fields = parse_consent_html(consent_html)
+        session_id = form_fields.get("sessionId")
+        csrf_token = form_fields.get("csrfToken")
+        if not session_id or not csrf_token:
+            raise YahooConsentError("Yahoo consent form is missing sessionId or csrfToken")
 
         # Step 2: POST consent
+        consent_payload = {
+            "agree": "agree",
+            "consentUUID": "default",
+            "sessionId": session_id,
+            "csrfToken": csrf_token,
+            "originalDoneUrl": "https://finance.yahoo.com/",
+            "namespace": "yahoo",
+        }
         post_resp = await self._request_func(
-            _GUCE_CONSENT,
+            f"{_CONSENT_COLLECT}?sessionId={session_id}",
             method="POST",
             route=route,
-            data=form_fields,
+            data=consent_payload,
             follow_redirects=True,
             cookie=state.cookie,
         )
@@ -299,7 +313,7 @@ class YahooAuth:
 
         # Step 3: GET copyConsent
         copy_resp = await self._request_func(
-            _GUCE_COPYCONSENT,
+            f"{_GUCE_COPYCONSENT}?sessionId={session_id}",
             method="GET",
             route=route,
             follow_redirects=True,

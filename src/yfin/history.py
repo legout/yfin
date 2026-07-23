@@ -15,7 +15,8 @@ import pyarrow as pa
 
 from .arrow import build_history_table
 from .client import YahooClient
-from .models import YahooRoute, normalize_symbols, validate_date_range
+from .exceptions import YahooApiError
+from .models import HISTORY_SCHEMA, YahooRoute, normalize_symbols, validate_date_range
 from .quotes import QuoteClient
 
 __all__ = ["history_async", "history"]
@@ -115,14 +116,12 @@ async def history_async(
     if own_client:
         client = YahooClient(proxies=[proxy] if proxy else None)
 
-    route = client.get_route(proxy)
-
     try:
         tasks = [
             _fetch_one(
                 client,
                 symbol,
-                route,
+                client.get_route(proxy),
                 start=start,
                 end=end,
                 period=period,
@@ -135,8 +134,6 @@ async def history_async(
         tables = await asyncio.gather(*tasks)
 
         if not tables:
-            from .models import HISTORY_SCHEMA
-
             arrays = [pa.array([], type=field.type) for field in HISTORY_SCHEMA]
             return pa.table(arrays, schema=HISTORY_SCHEMA)
 
@@ -149,7 +146,7 @@ async def history_async(
 async def _fetch_one(
     client: QuoteClient,
     symbol: str,
-    route: Any,
+    route: YahooRoute,
     **kwargs: Any,
 ) -> pa.Table:
     """Fetch and parse chart data for a single symbol."""
@@ -170,8 +167,6 @@ def _extract_chart_result(resp: Any, symbol: str) -> dict[str, Any] | None:
     # Check for chart-level error
     error = chart.get("error")
     if isinstance(error, dict):
-        from .exceptions import YahooApiError
-
         code = error.get("code", "Unknown")
         description = error.get("description", "")
         msg = f"{code}: {description}" if description else str(code)
@@ -207,8 +202,6 @@ def history(
 
     Raises :class:`RuntimeError` when called inside a running event loop.
     """
-    from .quotes import _assert_no_running_loop
-
     _assert_no_running_loop()
     return asyncio.run(
         history_async(
@@ -222,4 +215,15 @@ def history(
             client=client,
             proxy=proxy,
         )
+    )
+
+
+def _assert_no_running_loop() -> None:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    raise RuntimeError(
+        "yfin sync wrappers must not be called from a running event loop. "
+        "Use the async variant (history_async) instead."
     )

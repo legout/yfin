@@ -6,6 +6,7 @@ These functions convert validated Yahoo JSON payloads into deterministic
 
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
 from collections.abc import Sequence
 from typing import Any
@@ -93,7 +94,6 @@ def _infer_arrow_array(values: list[Any]) -> pa.Array:
     if not non_null:
         return pa.nulls(len(values), type=pa.string())
 
-    first = non_null[0]
     all_bool = all(isinstance(v, bool) for v in non_null)
     if all_bool:
         return pa.array(values, type=pa.bool_())
@@ -113,6 +113,7 @@ def _infer_arrow_array(values: list[Any]) -> pa.Array:
 # ---------------------------------------------------------------------------
 # History
 # ---------------------------------------------------------------------------
+
 
 def build_history_table(
     symbol: str,
@@ -159,7 +160,6 @@ def build_history_table(
     dividends_map = events.get("dividends", {}) or {}
     splits_map = events.get("splits", {}) or {}
 
-    ts_set = set(timestamps)
     dividends_by_ts: dict[int, float] = {}
     for ev in dividends_map.values():
         ts = ev.get("date")
@@ -175,16 +175,11 @@ def build_history_table(
         ratio = ev.get("splitRatio")
         if ts is not None:
             if num is not None and den is not None:
-                try:
+                with contextlib.suppress(TypeError, ZeroDivisionError):
                     splits_by_ts[int(ts)] = float(num) / float(den)
-                except (TypeError, ZeroDivisionError):
-                    pass
             elif ratio is not None and isinstance(ratio, str | int | float):
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     splits_by_ts[int(ts)] = _parse_split_ratio(ratio)
-                except (ValueError, TypeError):
-                    pass
-    _ = ts_set  # keep for future validation
 
     dividend_col = [dividends_by_ts.get(ts) for ts in timestamps]
     split_col = [splits_by_ts.get(ts) for ts in timestamps]
@@ -277,7 +272,8 @@ def to_polars(table: pa.Table) -> Any:
         import polars as pl
     except ImportError as exc:
         _POLARS_IMPORT_ERROR = (
-            "Polars is not installed. Install it with: pip install 'yfin[polars]' or pip install polars"
+            "Polars is not installed. "
+            "Install it with: pip install 'yfin[polars]' or pip install polars"
         )
         raise ImportError(_POLARS_IMPORT_ERROR) from exc
     return pl.from_arrow(table)

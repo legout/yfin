@@ -379,24 +379,36 @@ class TestHistoryAsync:
         assert table.schema == HISTORY_SCHEMA
 
     async def test_multiple_symbols_concatenated(self) -> None:
-        client = _MockHistoryClient({
-            "AAPL": CHART_NORMAL,
-            "MSFT": {
-                "chart": {
-                    "result": [
-                        {
-                            "meta": {"currency": "USD", "exchangeTimezoneName": "America/New_York"},
-                            "timestamp": [1609459200],
-                            "indicators": {
-                                "quote": [{"open": [200], "high": [210], "low": [195],
-                                           "close": [205], "volume": [5000000]}]
-                            },
-                        }
-                    ],
-                    "error": None,
-                }
-            },
-        })
+        client = _MockHistoryClient(
+            {
+                "AAPL": CHART_NORMAL,
+                "MSFT": {
+                    "chart": {
+                        "result": [
+                            {
+                                "meta": {
+                                    "currency": "USD",
+                                    "exchangeTimezoneName": "America/New_York",
+                                },
+                                "timestamp": [1609459200],
+                                "indicators": {
+                                    "quote": [
+                                        {
+                                            "open": [200],
+                                            "high": [210],
+                                            "low": [195],
+                                            "close": [205],
+                                            "volume": [5000000],
+                                        }
+                                    ]
+                                },
+                            }
+                        ],
+                        "error": None,
+                    }
+                },
+            }
+        )
         table = await history_async(["AAPL", "MSFT"], period="1y", client=client)
         assert table.num_rows == 4  # 3 AAPL + 1 MSFT
         symbols = table.column("symbol").to_pylist()

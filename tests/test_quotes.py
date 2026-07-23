@@ -14,7 +14,7 @@ import pytest
 
 from yfin.arrow import build_quote_table, to_polars
 from yfin.exceptions import YahooApiError
-from yfin.models import YahooRoute, camel_to_snake
+from yfin.models import YahooRoute
 
 # ---------------------------------------------------------------------------
 # Yahoo v7 quote fixtures
@@ -151,8 +151,14 @@ class TestBuildQuoteTable:
         )
         assert table.column_names[0] == "symbol"
         # All Yahoo-returned fields should be present as snake_case
-        expected = {"regular_market_price", "regular_market_volume", "currency",
-                     "short_name", "market_cap", "regular_market_change"}
+        expected = {
+            "regular_market_price",
+            "regular_market_volume",
+            "currency",
+            "short_name",
+            "market_cap",
+            "regular_market_change",
+        }
         assert expected.issubset(set(table.column_names))
 
     def test_float_values_correct(self) -> None:

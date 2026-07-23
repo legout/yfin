@@ -10,8 +10,6 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
 
-from yfin.models import YahooRoute
-
 __all__ = ["FakeResponse", "FakeRequestHandler", "make_request_func"]
 
 

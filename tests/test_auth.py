@@ -6,6 +6,8 @@ per-route state isolation, strategy switch (once only).
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from yfin.auth import (
@@ -29,7 +31,8 @@ FC_YAHOO = "https://fc.yahoo.com/"
 GETCRUMB_Q1 = "https://query1.finance.yahoo.com/v1/test/getcrumb"
 GETCRUMB_Q2 = "https://query2.finance.yahoo.com/v1/test/getcrumb"
 GUCE_CONSENT = "https://guce.yahoo.com/consent"
-GUCE_COPYCONSENT = "https://guce.yahoo.com/copyConsent"
+CONSENT_COLLECT = "https://consent.yahoo.com/v2/collectConsent?sessionId=abc123"
+COPYCONSENT = "https://guce.yahoo.com/copyConsent?sessionId=abc123"
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +169,19 @@ class TestBasicAuth:
         await auth.ensure_auth(route)
         assert handler.call_count == initial_call_count
 
+    async def test_concurrent_auth_for_one_route_uses_one_cookie_flow(self) -> None:
+        handler = FakeRequestHandler()
+        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=abc"))
+        handler.map_url(GETCRUMB_Q1, make_text_response("crumbXYZ"))
+        auth = YahooAuth(make_request_func(handler))
+        route = YahooRoute()
+
+        first, second = await asyncio.gather(auth.ensure_auth(route), auth.ensure_auth(route))
+
+        assert first is second
+        assert handler.url_call_count(FC_YAHOO) == 1
+        assert handler.url_call_count(GETCRUMB_Q1) == 1
+
     async def test_basic_blank_crumb_switches_to_csrf(self) -> None:
         handler = FakeRequestHandler()
         # Basic strategy responses
@@ -174,7 +190,8 @@ class TestBasicAuth:
 
         # CSRF strategy responses
         handler.map_url(GUCE_CONSENT, make_text_response(CONSENT_HTML, cookie="GUC=xyz"))
-        handler.map_url(GUCE_COPYCONSENT, make_text_response("", cookie="A1=def"))
+        handler.map_url(CONSENT_COLLECT, make_text_response("", cookie="A1=posted"))
+        handler.map_url(COPYCONSENT, make_text_response("", cookie="A1=def"))
         handler.map_url(GETCRUMB_Q2, make_text_response("csrfcrumb456"))
 
         auth = YahooAuth(make_request_func(handler))
@@ -185,6 +202,10 @@ class TestBasicAuth:
         assert state.strategy == AuthStrategy.CSRF
         assert state.switched
         assert state.crumb == "csrfcrumb456"
+        post_call = handler.find_call(CONSENT_COLLECT)
+        assert post_call is not None
+        assert post_call["data"]["csrfToken"] == "tokXYZ"
+        assert post_call["data"]["sessionId"] == "abc123"
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +220,8 @@ class TestCsrfAuth:
         handler.map_url(GETCRUMB_Q1, make_text_response("<html>consent wall</html>"))
 
         handler.map_url(GUCE_CONSENT, make_text_response(CONSENT_HTML, cookie="GUC=consent"))
-        handler.map_url(GUCE_COPYCONSENT, make_text_response("", cookie="A1=csrf"))
+        handler.map_url(CONSENT_COLLECT, make_text_response("", cookie="A1=posted"))
+        handler.map_url(COPYCONSENT, make_text_response("", cookie="A1=csrf"))
         handler.map_url(GETCRUMB_Q2, make_text_response("goodcrumb789"))
 
         auth = YahooAuth(make_request_func(handler))
@@ -236,7 +258,8 @@ class TestStrategySwitch:
         handler.map_url(GETCRUMB_Q1, make_text_response("  "))  # blank -> switch
         # CSRF also fails
         handler.map_url(GUCE_CONSENT, make_text_response(CONSENT_HTML, cookie="GUC=xyz"))
-        handler.map_url(GUCE_COPYCONSENT, make_text_response("", cookie="A1=csrf"))
+        handler.map_url(CONSENT_COLLECT, make_text_response("", cookie="A1=posted"))
+        handler.map_url(COPYCONSENT, make_text_response("", cookie="A1=csrf"))
         handler.map_url(GETCRUMB_Q2, make_text_response("  "))  # also blank
 
         auth = YahooAuth(make_request_func(handler))

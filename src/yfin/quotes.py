@@ -122,8 +122,6 @@ async def quotes_async(
     if own_client:
         client = YahooClient(proxies=[proxy] if proxy else None)
 
-    route = client.get_route(proxy)
-
     try:
         chunks = chunk_symbols(normalised, chunk_size)
         all_results: list[dict[str, Any]] = []
@@ -135,7 +133,7 @@ async def quotes_async(
                     "symbols": ",".join(chunk),
                     **_fields_params(fields),
                 },
-                route=route,
+                route=client.get_route(proxy),
             )
             for chunk in chunks
         ]

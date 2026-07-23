@@ -20,7 +20,6 @@ from yfin.models import (
 )
 from yfin.quotes import chunk_symbols
 
-
 # ---------------------------------------------------------------------------
 # camel_to_snake
 # ---------------------------------------------------------------------------
@@ -183,11 +182,7 @@ class TestDetectYahooError:
         assert detect_yahoo_error({"chart": {"result": []}}) is None
 
     def test_error_payload(self) -> None:
-        payload = {
-            "finance": {
-                "error": {"code": "Bad Request", "description": "Invalid symbol"}
-            }
-        }
+        payload = {"finance": {"error": {"code": "Bad Request", "description": "Invalid symbol"}}}
         result = detect_yahoo_error(payload)
         assert result is not None
         assert "Bad Request" in result
