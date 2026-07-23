@@ -40,7 +40,8 @@ def build_quote_table(
     (in caller order). Missing symbols get a null row; missing field values
     are null.
     """
-    snake_fields: list[str]
+    # Build (camel_for_lookup, snake_for_column) pairs
+    field_pairs: list[tuple[str, str]]
     if fields is None:
         # Use whatever keys Yahoo returned (deduplicated, deterministic order).
         seen_keys: dict[str, None] = {}
@@ -48,9 +49,11 @@ def build_quote_table(
             for k in row:
                 if k != "symbol":
                     seen_keys.setdefault(k, None)
-        snake_fields = list(seen_keys)
+        field_pairs = [(k, camel_to_snake(k)) for k in seen_keys]
     else:
-        snake_fields = [camel_to_snake(f) for f in fields]
+        field_pairs = [(f, camel_to_snake(f)) for f in fields]
+
+    snake_fields = [pair[1] for pair in field_pairs]
 
     # Build a lookup from Yahoo symbol -> result row
     by_symbol: dict[str, dict[str, Any]] = {}
@@ -65,10 +68,9 @@ def build_quote_table(
     for sym in requested_symbols:
         symbols.append(sym)
         row = by_symbol.get(sym)
-        for idx, field_name in enumerate(snake_fields):
-            camel = _snake_back_to_camel(fields[idx], field_name) if fields else field_name
-            val = row.get(camel, None) if row else None
-            column_values[field_name].append(val)
+        for camel_key, snake_name in field_pairs:
+            val = row.get(camel_key, None) if row else None
+            column_values[snake_name].append(val)
 
     col_arrays: list[pa.Array] = [pa.array(symbols, type=pa.string())]
     col_names = ["symbol"]
@@ -79,15 +81,6 @@ def build_quote_table(
         col_names.append(field_name)
 
     return pa.table(col_arrays, names=col_names)
-
-
-def _snake_back_to_camel(camel_field: str, snake_field: str) -> str:
-    """Given the original camelCase field and its snake form, return camel.
-
-    The snake form is only used for column naming; for lookups we use the
-    original camelCase name.
-    """
-    return camel_field
 
 
 def _infer_arrow_array(values: list[Any]) -> pa.Array:

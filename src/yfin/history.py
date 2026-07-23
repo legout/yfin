@@ -15,7 +15,8 @@ import pyarrow as pa
 
 from .arrow import build_history_table
 from .client import YahooClient
-from .models import normalize_symbols, validate_date_range
+from .models import YahooRoute, normalize_symbols, validate_date_range
+from .quotes import QuoteClient
 
 __all__ = ["history_async", "history"]
 
@@ -83,7 +84,7 @@ async def history_async(
     interval: str = "1d",
     events: Sequence[str] = _DEFAULT_EVENTS,
     include_pre_post: bool = False,
-    client: YahooClient | None = None,
+    client: QuoteClient | None = None,
     proxy: str | None = None,
 ) -> pa.Table:
     """Fetch historical OHLCV data and return a deterministic Arrow table.
@@ -146,7 +147,7 @@ async def history_async(
 
 
 async def _fetch_one(
-    client: YahooClient,
+    client: QuoteClient,
     symbol: str,
     route: Any,
     **kwargs: Any,
@@ -199,7 +200,7 @@ def history(
     interval: str = "1d",
     events: Sequence[str] = _DEFAULT_EVENTS,
     include_pre_post: bool = False,
-    client: YahooClient | None = None,
+    client: QuoteClient | None = None,
     proxy: str | None = None,
 ) -> pa.Table:
     """Synchronous wrapper for :func:`history_async`.

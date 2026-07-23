@@ -9,15 +9,36 @@ from __future__ import annotations
 import asyncio
 import urllib.parse
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 import pyarrow as pa
 
 from .arrow import build_quote_table
 from .client import YahooClient
-from .models import normalize_symbols
+from .models import YahooRoute, normalize_symbols
 
-__all__ = ["quotes_async", "quotes"]
+__all__ = ["quotes_async", "quotes", "QuoteClient"]
+
+# ---------------------------------------------------------------------------
+# Protocol for injectable clients (enables testing with fakes)
+# ---------------------------------------------------------------------------
+
+
+@runtime_checkable
+class QuoteClient(Protocol):
+    """Minimal interface a quote/history client must satisfy."""
+
+    def get_route(self, proxy: str | None = None) -> YahooRoute: ...
+
+    async def get_json(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        route: YahooRoute | None = None,
+    ) -> Any: ...
+
+    async def close(self) -> None: ...
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -76,7 +97,7 @@ async def quotes_async(
     *,
     fields: Sequence[str] | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-    client: YahooClient | None = None,
+    client: QuoteClient | None = None,
     proxy: str | None = None,
 ) -> pa.Table:
     """Fetch batch quotes and return a deterministic Arrow table.
@@ -159,7 +180,7 @@ def quotes(
     *,
     fields: Sequence[str] | None = None,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-    client: YahooClient | None = None,
+    client: QuoteClient | None = None,
     proxy: str | None = None,
 ) -> pa.Table:
     """Synchronous wrapper for :func:`quotes_async`.
