@@ -18,8 +18,19 @@ from .models import HISTORY_SCHEMA, camel_to_snake
 __all__ = [
     "build_quote_table",
     "build_history_table",
+    "build_summary_table",
+    "build_fundamentals_table",
+    "INTEGER_TYPES",
     "to_polars",
 ]
+
+# Types that Yahoo returns as integer-valued. All other fundamental types
+# are float-valued. Defined here (rather than in fundamentals.py) because
+# build_fundamentals_table needs it and arrow.py sits at the bottom of the
+# import chain.
+INTEGER_TYPES: frozenset[str] = frozenset(
+    {"MarketCap", "EnterpriseValue", "BasicAverageShares", "DilutedAverageShares"}
+)
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +261,296 @@ def _empty_history_table() -> pa.Table:
     """Return an empty history table with the canonical schema."""
     arrays = [pa.array([], type=field.type) for field in HISTORY_SCHEMA]
     return pa.table(arrays, schema=HISTORY_SCHEMA)
+
+
+# ---------------------------------------------------------------------------
+# quoteSummary (v10)
+# ---------------------------------------------------------------------------
+
+# Modules whose payloads are a single flat dict of scalar fields.
+_FLAT_SUMMARY_MODULES = frozenset(
+    {
+        "assetProfile",
+        "quoteType",
+        "summaryDetail",
+        "defaultKeyStatistics",
+        "financialData",
+    }
+)
+
+# Modules whose payloads contain a list of per-event dicts. The value is the
+# key inside the module dict that holds the event list.
+_ARRAY_SUMMARY_MODULES: dict[str, str] = {
+    "upgradeDowngradeHistory": "history",
+    "institutionOwnership": "ownershipList",
+    "fundOwnership": "ownershipList",
+    "insiderTransactions": "transactions",
+    "insiderHolders": "holders",
+    "majorHoldersBreakdown": "holders",
+    "recommendationTrend": "trend",
+}
+
+# Calendar module is flat-with-nested-earnings; handled specially below.
+_CALENDAR_MODULE = "calendarEvents"
+
+
+def _extract_raw(value: Any) -> Any:
+    """Unwrap a Yahoo ``{"raw": X, "fmt": ...}`` wrapper to *X*.
+
+    Returns the value unchanged when it is not a raw-wrapper. Recurses into
+    lists so that arrays of raw-wrapped values are flattened element-wise.
+    """
+    if isinstance(value, dict):
+        if "raw" in value:
+            return value["raw"]
+        return value
+    if isinstance(value, list):
+        return [_extract_raw(v) for v in value]
+    return value
+
+
+def build_summary_table(
+    raw_data: list[dict[str, Any]],
+    modules: list[str],
+) -> pa.Table:
+    """Build a deterministic Arrow table from quoteSummary v10 results.
+
+    Each entry in *raw_data* is one symbol's ``quoteSummary.result[0]`` dict
+    (a mapping of module name → module payload). *modules* is the list of
+    module names that were requested and should be materialised as columns.
+
+    FLAT modules (assetProfile, summaryDetail, …) and CALENDAR modules produce
+    one combined row per symbol — all scalar fields are merged into a single
+    wide row.
+
+    ARRAY modules (upgradeDowngradeHistory, institutionOwnership, …) produce
+    one row per event, each tagged with the symbol.
+
+    The per-symbol flat table and the per-event array table are concatenated
+    row-wise (array rows carry nulls for flat columns and vice versa).
+    """
+    if not raw_data:
+        return _empty_summary_table()
+
+    scalar_rows: list[dict[str, Any]] = []
+    array_rows: list[dict[str, Any]] = []
+
+    for entry in raw_data:
+        symbol = _entry_symbol(entry)
+        # Merge all flat + calendar modules for this symbol into one row.
+        scalar_row: dict[str, Any] = {"symbol": symbol}
+        has_scalar = False
+        for module in modules:
+            payload = entry.get(module)
+            if not isinstance(payload, dict):
+                continue
+            if module in _FLAT_SUMMARY_MODULES:
+                scalar_row.update(_flatten_module(symbol, module, payload))
+                has_scalar = True
+            elif module == _CALENDAR_MODULE:
+                scalar_row.update(_flatten_calendar(symbol, payload))
+                has_scalar = True
+            elif module in _ARRAY_SUMMARY_MODULES:
+                list_key = _ARRAY_SUMMARY_MODULES[module]
+                events = payload.get(list_key)
+                if isinstance(events, list):
+                    for event in events:
+                        if isinstance(event, dict):
+                            array_rows.append(_flatten_event(symbol, module, list_key, event))
+        if has_scalar:
+            scalar_rows.append(scalar_row)
+
+    tables: list[pa.Table] = []
+    if scalar_rows:
+        tables.append(_rows_to_table(scalar_rows))
+    if array_rows:
+        tables.append(_rows_to_table(array_rows))
+
+    if not tables:
+        return _empty_summary_table()
+    if len(tables) == 1:
+        return tables[0]
+    return pa.concat_tables(tables, promote_options="default")
+
+
+def _entry_symbol(entry: dict[str, Any]) -> str:
+    """Best-effort extraction of the symbol from a result entry."""
+    for key in ("quoteType", "price", "summaryDetail"):
+        sub = entry.get(key)
+        if isinstance(sub, dict):
+            sym = sub.get("symbol")
+            if isinstance(sym, str):
+                return sym.upper()
+    return ""
+
+
+def _flatten_module(
+    symbol: str,
+    module: str,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Flatten a flat module dict into a single row.
+
+    Nested ``{"raw": X}`` values are unwrapped. Complex values (lists/dicts)
+    are dropped — they are handled by the array/calendar paths. Keys are
+    prefixed with the module name to avoid collisions across modules.
+    """
+    row: dict[str, Any] = {"symbol": symbol}
+    for key, value in payload.items():
+        if key == "symbol":
+            continue
+        unwrapped = _extract_raw(value)
+        if isinstance(unwrapped, (dict, list)):
+            # companyOfficers etc. — skip in the flat view.
+            continue
+        col = f"{module}.{key}"
+        row[col] = unwrapped
+    return row
+
+
+def _flatten_event(
+    symbol: str,
+    module: str,
+    list_key: str,
+    event: dict[str, Any],
+) -> dict[str, Any]:
+    """Flatten a single array-module event into one row."""
+    row: dict[str, Any] = {"symbol": symbol}
+    for key, value in event.items():
+        unwrapped = _extract_raw(value)
+        if isinstance(unwrapped, dict):
+            # Nested objects inside events: flatten one level.
+            for sub_k, sub_v in unwrapped.items():
+                row[f"{module}.{key}.{sub_k}"] = _extract_raw(sub_v)
+        else:
+            row[f"{module}.{key}"] = unwrapped
+    return row
+
+
+def _flatten_calendar(symbol: str, payload: dict[str, Any]) -> dict[str, Any]:
+    """Flatten the calendarEvents module into one row per symbol."""
+    row: dict[str, Any] = {"symbol": symbol}
+    for key, value in payload.items():
+        if key == "earnings" and isinstance(value, dict):
+            earnings = value
+            # earningsDate is a list of {"raw": epoch} objects.
+            ed = earnings.get("earningsDate")
+            if isinstance(ed, list) and ed:
+                first = ed[0] if isinstance(ed[0], dict) else {}
+                row["calendarEvents.earningsDate"] = _extract_raw(first)
+            for ek, ev in earnings.items():
+                if ek == "earningsDate":
+                    continue
+                row[f"calendarEvents.earnings.{ek}"] = _extract_raw(ev)
+        else:
+            row[f"calendarEvents.{key}"] = _extract_raw(value)
+    return row
+
+
+def _rows_to_table(rows: list[dict[str, Any]]) -> pa.Table:
+    """Build an Arrow table from a list of row dicts.
+
+    Column order is deterministic: ``symbol`` first, then remaining keys in
+    first-seen order. Missing values in later rows become null.
+    """
+    ordered_fields: list[str] = ["symbol"]
+    seen: set[str] = {"symbol"}
+    for row in rows:
+        for k in row:
+            if k not in seen:
+                seen.add(k)
+                ordered_fields.append(k)
+
+    col_arrays: list[pa.Array] = []
+    col_names: list[str] = []
+    for field in ordered_fields:
+        values = [row.get(field) for row in rows]
+        if field == "symbol":
+            col_arrays.append(pa.array(values, type=pa.string()))
+        else:
+            col_arrays.append(_infer_arrow_array(values))
+        col_names.append(camel_to_snake(field.replace(".", "_")))
+
+    return pa.table(col_arrays, names=col_names)
+
+
+def _empty_summary_table() -> pa.Table:
+    """Return an empty summary table with just a symbol column."""
+    return pa.table({"symbol": pa.array([], type=pa.string())})
+
+
+# ---------------------------------------------------------------------------
+# Fundamentals timeseries
+# ---------------------------------------------------------------------------
+
+
+def build_fundamentals_table(
+    raw_data: list[dict[str, Any]],
+    types: list[str],
+) -> pa.Table:
+    """Build a deterministic Arrow table from fundamentals-timeseries rows.
+
+    Parameters
+    ----------
+    raw_data
+        Flat list of ``{symbol, asOfDate, <type1>: value, <type2>: value, ...}``
+        dicts — one per (symbol, date) pair. Missing types are omitted from a
+        row dict and become nulls in the output.
+    types
+        The Yahoo type names (camelCase) that were requested, in the order
+        they should appear as columns.
+
+    Returns
+    -------
+    pa.Table
+        Columns: ``symbol`` (string), ``as_of_date`` (date32), then one column
+        per type converted to snake_case. Integer types
+        (:data:`INTEGER_TYPES`) use ``int64``; everything else ``float64``.
+        An empty input yields an empty table with the full schema.
+    """
+    snake_types = [camel_to_snake(t) for t in types]
+    is_int = [t in INTEGER_TYPES for t in types]
+
+    # Column builders
+    symbols: list[str | None] = []
+    dates: list[dt.date | None] = []
+    col_values: dict[str, list[Any]] = {t: [] for t in types}
+
+    for row in raw_data:
+        symbols.append(row.get("symbol"))
+        as_of = row.get("asOfDate")
+        dates.append(_parse_as_of_date(as_of) if as_of is not None else None)
+        for t in types:
+            col_values[t].append(row.get(t))
+
+    col_arrays: list[pa.Array] = [pa.array(symbols, type=pa.string())]
+    col_names: list[str] = ["symbol"]
+    col_arrays.append(
+        pa.array(dates, type=pa.date32()) if dates else pa.array([], type=pa.date32())
+    )
+    col_names.append("as_of_date")
+
+    for t, snake_name, int_col in zip(types, snake_types, is_int, strict=True):
+        vals = col_values[t]
+        if int_col:
+            col_arrays.append(pa.array(vals, type=pa.int64()))
+        else:
+            col_arrays.append(pa.array(vals, type=pa.float64()))
+        col_names.append(snake_name)
+
+    return pa.table(col_arrays, names=col_names)
+
+
+def _parse_as_of_date(value: Any) -> dt.date | None:
+    """Parse a Yahoo ``asOfDate`` (``"YYYY-MM-DD"``) into ``datetime.date``."""
+    if isinstance(value, dt.date):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        return dt.date.fromisoformat(value)
+    except ValueError:
+        return None
 
 
 # ---------------------------------------------------------------------------
