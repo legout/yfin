@@ -23,6 +23,13 @@ from .models import YahooRoute, detect_yahoo_error
 
 __all__ = ["YahooClient"]
 
+# yahooquery-style default query parameters sent with every API request.
+_DEFAULT_QUERY_PARAMS: dict[str, str] = {
+    "lang": "en-US",
+    "region": "US",
+    "corsDomain": "finance.yahoo.com",
+}
+
 
 class YahooClient:
     """High-level Yahoo client wrapping a fastreq session.
@@ -49,15 +56,21 @@ class YahooClient:
         concurrency: int = 10,
         max_retries: int = 3,
         rate_limit: float | None = None,
+        backend: str = "curl_cffi",
+        impersonate: str | None = "random",
+        timeout: float | None = 10.0,
         follow_redirects: bool = True,
         random_user_agent: bool = True,
         headers: dict[str, str] | None = None,
         **fastreq_kwargs: Any,
     ) -> None:
         self._fastreq = fastreq.FastRequests(
+            backend=backend,
             concurrency=concurrency,
             max_retries=max_retries,
             rate_limit=rate_limit,
+            impersonate=impersonate,
+            timeout=timeout,
             follow_redirects=follow_redirects,
             random_user_agent=random_user_agent,
             headers=headers,
@@ -135,7 +148,7 @@ class YahooClient:
         state = await self._auth.ensure_auth(route)
         crumb = state.crumb
 
-        request_params = dict(params) if params else {}
+        request_params = {**_DEFAULT_QUERY_PARAMS, **(params or {})}
         if crumb:
             request_params["crumb"] = crumb
 

@@ -1,14 +1,19 @@
 """Yahoo cookie/crumb authentication.
 
-Implements a two-strategy flow adapted from the current yfinance algorithm
-(but with no yfinance dependency):
+Adopts the yahooquery flow (no yahooquery dependency):
 
-1. **Basic strategy** — GET ``fc.yahoo.com`` to obtain a cookie, then
-   GET ``query1.finance.yahoo.com/v1/test/getcrumb`` to obtain a crumb.
+1. **Warmup** — GET ``https://finance.yahoo.com`` with redirects. This seeds
+   the session cookie jar (A1/A3 cookies); in most regions any consent wall
+   is resolved by following the redirect chain.
 
-2. **CSRF fallback** — GET ``guce.yahoo.com/consent``, parse the consent form
-   with ``html.parser``, POST consent, GET ``copyConsent``, then request the
-   crumb from ``query2.finance.yahoo.com``.
+2. **Crumb** — GET ``https://query2.finance.yahoo.com/v1/test/getcrumb``.
+   On failure the client proceeds crumb-less: the v8 chart API works without
+   a crumb, and getcrumb is frequently rate-limited (429).
+
+3. **CSRF fallback** — when the basic warmup fails entirely, run the explicit
+   consent flow (``guce.yahoo.com/consent`` form parse, POST
+   ``consent.yahoo.com/v2/collectConsent``, ``copyConsent``) exactly once,
+   then request the crumb from query2 again.
 
 Each :class:`YahooSessionState` owns an independent route (direct or a specific
 proxy URL). Cookie/crumb state is **never** shared between routes.
@@ -18,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import html
+import urllib.parse
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -33,10 +39,9 @@ __all__ = [
     "YahooAuth",
 ]
 
-# URLs used by the two strategies.
-_FC_YAHOO = "https://fc.yahoo.com/"
-_GETCRUMB_QUERY1 = "https://query1.finance.yahoo.com/v1/test/getcrumb"
-_GETCRUMB_QUERY2 = "https://query2.finance.yahoo.com/v1/test/getcrumb"
+# URLs used by the two strategies (mirrors yahooquery's session setup).
+_WARMUP_URL = "https://finance.yahoo.com"
+_GETCRUMB = "https://query2.finance.yahoo.com/v1/test/getcrumb"
 _GUCE_CONSENT = "https://guce.yahoo.com/consent"
 _GUCE_COPYCONSENT = "https://guce.yahoo.com/copyConsent"
 _CONSENT_COLLECT = "https://consent.yahoo.com/v2/collectConsent"
@@ -119,6 +124,10 @@ def validate_crumb(crumb: str) -> str:
     # Yahoo crumbs are short opaque tokens; HTML indicates a consent wall.
     if "<html" in stripped.lower() or "<!doctype" in stripped.lower():
         raise YahooCrumbError("Yahoo returned HTML instead of a crumb (consent wall)")
+    # A JSON body is an error payload (e.g. {"finance": {"error": ...}}),
+    # never a crumb — accepting it poisons every subsequent request.
+    if stripped.startswith(("{", "[")):
+        raise YahooCrumbError(f"Yahoo returned JSON instead of a crumb: {stripped[:80]!r}")
     if len(stripped) < _CRUMB_MIN_LEN:
         raise YahooCrumbError(f"Yahoo crumb too short: {stripped!r}")
     return stripped
@@ -261,14 +270,16 @@ class YahooAuth:
     # -- Basic strategy ----------------------------------------------------------
 
     async def _basic_auth(self, state: YahooSessionState, route: YahooRoute) -> None:
-        """Basic: GET fc.yahoo.com for cookie, then query1 getcrumb."""
-        resp = await self._request_func(_FC_YAHOO, method="GET", route=route, follow_redirects=True)
+        """Basic: warmup finance.yahoo.com for cookies, then query2 getcrumb."""
+        resp = await self._request_func(
+            _WARMUP_URL, method="GET", route=route, follow_redirects=True
+        )
         cookie = _extract_cookie(resp)
         if cookie:
             state.cookie = cookie
 
         crumb_resp = await self._request_func(
-            _GETCRUMB_QUERY1,
+            _GETCRUMB,
             method="GET",
             route=route,
             follow_redirects=True,
@@ -296,15 +307,19 @@ class YahooAuth:
         if not session_id or not csrf_token:
             raise YahooConsentError("Yahoo consent form is missing sessionId or csrfToken")
 
-        # Step 2: POST consent
-        consent_payload = {
-            "agree": "agree",
-            "consentUUID": "default",
-            "sessionId": session_id,
-            "csrfToken": csrf_token,
-            "originalDoneUrl": "https://finance.yahoo.com/",
-            "namespace": "yahoo",
-        }
+        # Step 2: POST consent (yahooquery's proven payload: "agree" is sent
+        # twice; pre-encoded so duplicate keys survive every backend)
+        consent_payload = urllib.parse.urlencode(
+            [
+                ("agree", "agree"),
+                ("agree", "agree"),
+                ("consentUUID", "default"),
+                ("sessionId", session_id),
+                ("csrfToken", csrf_token),
+                ("originalDoneUrl", _WARMUP_URL),
+                ("namespace", "yahoo"),
+            ]
+        )
         post_resp = await self._request_func(
             f"{_CONSENT_COLLECT}?sessionId={session_id}",
             method="POST",
@@ -331,7 +346,7 @@ class YahooAuth:
 
         # Step 4: GET crumb from query2
         crumb_resp = await self._request_func(
-            _GETCRUMB_QUERY2,
+            _GETCRUMB,
             method="GET",
             route=route,
             follow_redirects=True,

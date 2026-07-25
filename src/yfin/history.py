@@ -25,7 +25,7 @@ __all__ = ["history_async", "history"]
 # Constants
 # ---------------------------------------------------------------------------
 
-_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+_CHART_URL = "https://query2.finance.yahoo.com/v8/finance/chart/{symbol}"
 _DEFAULT_EVENTS: tuple[str, ...] = ("div", "split")
 
 

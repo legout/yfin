@@ -44,7 +44,7 @@ class QuoteClient(Protocol):
 # Constants
 # ---------------------------------------------------------------------------
 
-_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
+_QUOTE_URL = "https://query2.finance.yahoo.com/v7/finance/quote"
 DEFAULT_CHUNK_SIZE = 200
 MAX_URL_LENGTH = 8000  # conservative URL length guard
 

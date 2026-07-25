@@ -1,7 +1,8 @@
 # yfin-client
 
 Compact Python 3.14 Yahoo Finance client returning `pyarrow.Table`, built on
-[fastreq](https://github.com/legout/fastreq).
+[fastreq](https://github.com/legout/fastreq)'s `curl_cffi` backend with
+browser TLS impersonation (the same trick that makes yahooquery reliable).
 
 Published on PyPI as `yfin-client`; imported as `yfin`.
 
@@ -94,17 +95,25 @@ included as snake_case columns.
 
 ## Cookie and crumb authentication
 
-yfin adapts Yahoo's two-strategy authentication model (no yfinance dependency):
+yfin adopts yahooquery's proven session flow, built on fastreq's `curl_cffi`
+backend (no yahooquery or curl_cffi dependency at the API level):
 
-1. **Basic strategy**: GET `fc.yahoo.com` for a cookie, then GET
-   `query1.finance.yahoo.com/v1/test/getcrumb` for a crumb.
-2. **CSRF fallback**: GET `guce.yahoo.com/consent`, parse hidden form fields
-   with stdlib `html.parser`, POST consent, GET `copyConsent`, then GET the
-   crumb from `query2.finance.yahoo.com`.
+1. **Browser impersonation** — every request carries a real browser's TLS
+   fingerprint (JA3/JA4), HTTP/2 settings, and headers via curl_cffi's
+   `impersonate` feature (a random recent Chrome/Safari/Firefox target per
+   client). This is what keeps Yahoo's bot detection from rate-limiting you.
+2. **Warmup** — GET `https://finance.yahoo.com` (redirects followed) seeds
+   the session cookie jar; most consent walls resolve through the redirect
+   chain automatically.
+3. **Crumb** — one GET to `query2.finance.yahoo.com/v1/test/getcrumb` per
+   route, cached for the session. If it fails, requests proceed crumb-less:
+   the v8 chart API works without a crumb.
+4. **CSRF fallback** — if the warmup itself fails, an explicit consent flow
+   (guce consent form parse, `collectConsent` POST, `copyConsent`) runs once.
 
-On crumb-invalid errors or HTTP 429, the crumb is cleared and the strategy
-switches once (basic → CSRF). Blank, HTML, and too-short crumbs are treated as
-typed failures.
+Every API request carries yahooquery's default query parameters
+(`lang=en-US&region=US&corsDomain=finance.yahoo.com`) plus the crumb when
+available. Both quotes (v7) and history (v8/chart) use the `query2` host.
 
 Each network route (direct or a specific proxy URL) maintains independent
 cookie/crumb state. A crumb obtained through one proxy is never sent through

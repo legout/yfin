@@ -285,7 +285,7 @@ class TestBuildHistoryTable:
 class TestBuildChartParams:
     def test_period_range(self) -> None:
         url, params = build_chart_params("AAPL", period="1y")
-        assert url == "https://query1.finance.yahoo.com/v8/finance/chart/AAPL"
+        assert url == "https://query2.finance.yahoo.com/v8/finance/chart/AAPL"
         assert params["range"] == "1y"
         assert params["interval"] == "1d"
         assert "period1" not in params

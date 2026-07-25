@@ -20,14 +20,13 @@ from .conftest import (
     make_text_response,
 )
 
-FC_YAHOO = "https://fc.yahoo.com/"
-GETCRUMB_Q1 = "https://query1.finance.yahoo.com/v1/test/getcrumb"
-GETCRUMB_Q2 = "https://query2.finance.yahoo.com/v1/test/getcrumb"
+WARMUP = "https://finance.yahoo.com"
+GETCRUMB = "https://query2.finance.yahoo.com/v1/test/getcrumb"
 GUCE_CONSENT = "https://guce.yahoo.com/consent"
 CONSENT_COLLECT = "https://consent.yahoo.com/v2/collectConsent?sessionId=session-1"
 COPYCONSENT = "https://guce.yahoo.com/copyConsent?sessionId=session-1"
-QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
-CHART_URL_PREFIX = "https://query1.finance.yahoo.com/v8/finance/chart/"
+QUOTE_URL = "https://query2.finance.yahoo.com/v7/finance/quote"
+CHART_URL_PREFIX = "https://query2.finance.yahoo.com/v8/finance/chart/"
 
 
 # ---------------------------------------------------------------------------
@@ -68,8 +67,8 @@ def make_client_with_handler(handler: FakeRequestHandler) -> YahooClient:
 class TestClientGetJson:
     async def test_get_json_success(self) -> None:
         handler = FakeRequestHandler()
-        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=abc"))
-        handler.map_url(GETCRUMB_Q1, make_text_response("goodcrumb"))
+        handler.map_url(WARMUP, make_text_response("", cookie="A1=abc"))
+        handler.map_url(GETCRUMB, make_text_response("goodcrumb"))
 
         quote_data = {"quoteResponse": {"result": [{"symbol": "AAPL", "regularMarketPrice": 150}]}}
         handler.map_url(QUOTE_URL, FakeResponse(json_data=quote_data, is_json=True))
@@ -83,11 +82,17 @@ class TestClientGetJson:
         quote_call = handler.find_call(QUOTE_URL)
         assert quote_call is not None
         assert quote_call["params"]["crumb"] == "goodcrumb"
+        # yahooquery-style default params ride along on every request
+        assert quote_call["params"]["lang"] == "en-US"
+        assert quote_call["params"]["region"] == "US"
+        assert quote_call["params"]["corsDomain"] == "finance.yahoo.com"
+        # caller params are preserved
+        assert quote_call["params"]["symbols"] == "AAPL"
 
     async def test_cookie_header_sent(self) -> None:
         handler = FakeRequestHandler()
-        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=abc; Path=/"))
-        handler.map_url(GETCRUMB_Q1, make_text_response("crumb123"))
+        handler.map_url(WARMUP, make_text_response("", cookie="A1=abc; Path=/"))
+        handler.map_url(GETCRUMB, make_text_response("crumb123"))
 
         quote_data = {"quoteResponse": {"result": []}}
         handler.map_url(QUOTE_URL, FakeResponse(json_data=quote_data, is_json=True))
@@ -109,8 +114,8 @@ class TestClientGetJson:
 class TestRateLimitHandling:
     async def test_429_raises_rate_limit_error(self) -> None:
         handler = FakeRequestHandler()
-        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=abc"))
-        handler.map_url(GETCRUMB_Q1, make_text_response("crumb123"))
+        handler.map_url(WARMUP, make_text_response("", cookie="A1=abc"))
+        handler.map_url(GETCRUMB, make_text_response("crumb123"))
         handler.map_url(QUOTE_URL, FakeResponse(status_code=429, headers={"retry-after": "60"}))
 
         client = make_client_with_handler(handler)
@@ -121,8 +126,8 @@ class TestRateLimitHandling:
 
     async def test_429_clears_crumb(self) -> None:
         handler = FakeRequestHandler()
-        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=abc"))
-        handler.map_url(GETCRUMB_Q1, make_text_response("crumb123"))
+        handler.map_url(WARMUP, make_text_response("", cookie="A1=abc"))
+        handler.map_url(GETCRUMB, make_text_response("crumb123"))
         handler.map_url(QUOTE_URL, FakeResponse(status_code=429))
 
         client = make_client_with_handler(handler)
@@ -135,8 +140,8 @@ class TestRateLimitHandling:
 
     async def test_429_without_retry_after(self) -> None:
         handler = FakeRequestHandler()
-        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=abc"))
-        handler.map_url(GETCRUMB_Q1, make_text_response("crumb123"))
+        handler.map_url(WARMUP, make_text_response("", cookie="A1=abc"))
+        handler.map_url(GETCRUMB, make_text_response("crumb123"))
         handler.map_url(QUOTE_URL, FakeResponse(status_code=429))
 
         client = make_client_with_handler(handler)
@@ -154,8 +159,8 @@ class TestRateLimitHandling:
 class TestApiErrorHandling:
     async def test_yahoo_error_raises_typed_exception(self) -> None:
         handler = FakeRequestHandler()
-        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=abc"))
-        handler.map_url(GETCRUMB_Q1, make_text_response("crumb123"))
+        handler.map_url(WARMUP, make_text_response("", cookie="A1=abc"))
+        handler.map_url(GETCRUMB, make_text_response("crumb123"))
 
         error_payload = {
             "finance": {"error": {"code": "Internal Error", "description": "Something broke"}}
@@ -175,9 +180,9 @@ class TestApiErrorHandling:
 class TestCrumbRetrySwitch:
     async def test_crumb_error_triggers_strategy_switch(self) -> None:
         handler = FakeRequestHandler()
-        # Basic strategy
-        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=basic"))
-        handler.map_url(GETCRUMB_Q1, make_text_response("basiccrumb"))
+        # Basic strategy (warmup + getcrumb; CSRF reuses the same getcrumb URL)
+        handler.map_url(WARMUP, make_text_response("", cookie="A1=basic"))
+        handler.map_url(GETCRUMB, make_text_response("freshcrumb"))
 
         # First quote request returns crumb error
         crumb_error = {
@@ -191,7 +196,6 @@ class TestCrumbRetrySwitch:
         handler.map_url(GUCE_CONSENT, make_text_response(csrf_consent_html, cookie="GUC=x"))
         handler.map_url(CONSENT_COLLECT, make_text_response("", cookie="A1=posted"))
         handler.map_url(COPYCONSENT, make_text_response("", cookie="A1=csrf"))
-        handler.map_url(GETCRUMB_Q2, make_text_response("csrfcrumb"))
 
         # Need to queue the crumb error first, then success
         handler.queue_response(FakeResponse(json_data=crumb_error, is_json=True))
@@ -220,8 +224,8 @@ class TestProxyRouteIsolation:
 
     async def test_different_routes_get_different_states(self) -> None:
         handler = FakeRequestHandler()
-        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=abc"))
-        handler.map_url(GETCRUMB_Q1, make_text_response("crumb"))
+        handler.map_url(WARMUP, make_text_response("", cookie="A1=abc"))
+        handler.map_url(GETCRUMB, make_text_response("crumb"))
 
         client = make_client_with_handler(handler)
 
@@ -240,8 +244,8 @@ class TestProxyRouteIsolation:
 
     async def test_clearing_one_route_doesnt_affect_other(self) -> None:
         handler = FakeRequestHandler()
-        handler.map_url(FC_YAHOO, make_text_response("", cookie="A1=abc"))
-        handler.map_url(GETCRUMB_Q1, make_text_response("crumb"))
+        handler.map_url(WARMUP, make_text_response("", cookie="A1=abc"))
+        handler.map_url(GETCRUMB, make_text_response("crumb"))
 
         client = make_client_with_handler(handler)
 

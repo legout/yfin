@@ -47,7 +47,7 @@ from .models import (
 )
 from .quotes import quotes, quotes_async
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
     "__version__",
