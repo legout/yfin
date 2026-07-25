@@ -134,10 +134,10 @@ class YahooClient:
 
         state = await self._auth.ensure_auth(route)
         crumb = state.crumb
-        assert crumb is not None  # ensure_auth guarantees this
 
         request_params = dict(params) if params else {}
-        request_params["crumb"] = crumb
+        if crumb:
+            request_params["crumb"] = crumb
 
         headers: dict[str, str] = {}
         cookie = self._auth.get_cookie_header(route)
@@ -197,7 +197,7 @@ def _parse_retry_after(resp: Any) -> float | None:
         return None
     try:
         return float(ra)
-    except TypeError, ValueError:
+    except (TypeError, ValueError):
         return None
 
 

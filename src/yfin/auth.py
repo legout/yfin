@@ -228,7 +228,9 @@ class YahooAuth:
         """Ensure the state for *route* has a valid cookie and crumb.
 
         Uses the current strategy; switches to CSRF fallback exactly once if
-        the basic strategy fails.
+        the basic strategy fails. If all strategies fail to obtain a crumb,
+        returns a state with ``crumb=None`` — Yahoo's chart API works without
+        a crumb, so callers can still proceed.
         """
         state = self.get_state(route)
 
@@ -240,11 +242,15 @@ class YahooAuth:
                 try:
                     await self._authenticate(state, route)
                     return state
-                except YahooCrumbError:
+                except (YahooCrumbError, Exception):
                     if state.can_switch_strategy():
                         state.switch_strategy()
                         continue
-                    raise
+                    # All strategies exhausted — proceed without crumb.
+                    # The chart API works without one; getcrumb is frequently
+                    # rate-limited (429) and the crumb is optional for chart
+                    # endpoints.
+                    return state
 
     async def _authenticate(self, state: YahooSessionState, route: YahooRoute) -> None:
         if state.strategy == AuthStrategy.BASIC:
