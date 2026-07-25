@@ -1,7 +1,9 @@
-# yfin
+# yfin-client
 
 Compact Python 3.14 Yahoo Finance client returning `pyarrow.Table`, built on
 [fastreq](https://github.com/legout/fastreq).
+
+Published on PyPI as `yfin-client`; imported as `yfin`.
 
 ## What it does
 
@@ -23,32 +25,11 @@ Compact Python 3.14 Yahoo Finance client returning `pyarrow.Table`, built on
 ## Installation
 
 ```bash
-pip install yfin            # core (pyarrow output)
-pip install 'yfin[polars]'  # with Polars conversion
+pip install yfin-client            # core (pyarrow output)
+pip install 'yfin-client[polars]'  # with Polars conversion
 ```
 
-### Release sequencing (important)
-
-yfin 1.0 depends on `fastreq>=3.0.0`. If fastreq 3.0.0 is not yet available
-on your package index, install it from the local wheel first:
-
-```bash
-# Install the verified fastreq 3.0.0 wheel into your environment
-pip install /path/to/fastreq-3.0.0-py3-none-any.whl
-
-# Then install yfin (it will find fastreq already satisfied)
-pip install yfin
-```
-
-For development with `uv`, do NOT commit an absolute local path or file URL
-to `pyproject.toml`. Instead, install the wheel into the project venv:
-
-```bash
-uv venv --python 3.14 .venv
-source .venv/bin/activate
-uv pip install /path/to/fastreq-3.0.0-py3-none-any.whl
-uv pip install -e . --no-deps
-```
+Requires `fastreq>=3.0.0`, which is resolved automatically from PyPI.
 
 ## Usage
 
@@ -163,7 +144,7 @@ success):
 YFIN_LIVE_SMOKE=1 uv run pytest tests/test_live_smoke.py -q
 ```
 
-## Migration from legacy yfin
+## Migration from legacy yfin (pre-1.0)
 
 This is a clean rewrite. The legacy API (`QuoteSummary`, `Search`, `Lookup`,
 `validate`, pandas DataFrames) has been removed. Key changes:

@@ -1,5 +1,5 @@
 [project]
-name = "yfin"
+name = "yfin-client"
 version = "1.0.0"
 description = "Compact Python 3.14 Yahoo Finance client returning pyarrow.Table, built on fastreq."
 readme = "README.md"
@@ -16,10 +16,14 @@ polars = ["polars>=1.0.0"]
 
 [dependency-groups]
 dev = [
+    "ipython>=9.15.0",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.24.0",
     "ruff>=0.8.0",
+    "stealthkit>=1.0.3",
     "ty>=0.0.1a1",
+    "yahfin>=1.1.1",
+    "yahooquery>=2.4.1",
 ]
 
 [build-system]
@@ -27,12 +31,9 @@ requires = ["uv_build>=0.5.0,<0.12"]
 build-backend = "uv_build"
 
 [tool.uv]
-# yfin 1.0 depends on fastreq>=3.0.0, which is not yet published to a public index.
-# For local development, install the verified fastreq 3.0.0 wheel from its
-# isolated build worktree into this project's venv — do NOT commit a local
-# path or file URL here. See README "Release sequencing" for details.
+# Requires fastreq>=3.0.0, published to PyPI as fastreq 3.0.0.
 
-[tool.uv_build]
+[tool.uv.build-backend]
 module-name = "yfin"
 module-root = "src"
 

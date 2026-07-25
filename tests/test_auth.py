@@ -237,13 +237,15 @@ class TestCsrfAuth:
         handler.map_url(GETCRUMB_Q1, make_text_response(""))  # blank -> triggers switch
 
         handler.map_url(GUCE_CONSENT, make_text_response("no form here"))
-        # The consent parse should fail
+        # The consent parse fails; with both strategies exhausted, ensure_auth
+        # proceeds crumb-less (crumb is optional for the chart API).
 
         auth = YahooAuth(make_request_func(handler))
         route = YahooRoute()
 
-        with pytest.raises(YahooConsentError, match="No hidden form"):
-            await auth.ensure_auth(route)
+        state = await auth.ensure_auth(route)
+        assert state.crumb is None
+        assert state.strategy == AuthStrategy.CSRF
 
 
 # ---------------------------------------------------------------------------
@@ -265,8 +267,12 @@ class TestStrategySwitch:
         auth = YahooAuth(make_request_func(handler))
         route = YahooRoute()
 
-        with pytest.raises(YahooCrumbError):
-            await auth.ensure_auth(route)
+        # Both strategies yield blank crumbs: switch happens exactly once,
+        # then ensure_auth proceeds crumb-less instead of raising.
+        state = await auth.ensure_auth(route)
+        assert state.crumb is None
+        assert state.strategy == AuthStrategy.CSRF
+        assert state.switched is True
 
 
 # ---------------------------------------------------------------------------
