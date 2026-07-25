@@ -131,9 +131,31 @@ async def history_async(
             )
             for symbol in normalised
         ]
-        tables = await asyncio.gather(*tasks)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        tables = []
+        errors: list[str] = []
+        for sym, result in zip(normalised, results, strict=True):
+            if isinstance(result, BaseException):
+                errors.append(f"{sym}: {type(result).__name__}: {result}")
+            else:
+                tables.append(result)
+
+        if errors:
+            import logging
+
+            logging.getLogger("yfin").warning(
+                "Failed symbols (%d/%d): %s",
+                len(errors),
+                len(normalised),
+                ", ".join(e.split(":")[0] for e in errors),
+            )
 
         if not tables:
+            if errors:
+                raise YahooApiError(
+                    f"All {len(normalised)} symbols failed: {'; '.join(errors[:3])}"
+                )
             arrays = [pa.array([], type=field.type) for field in HISTORY_SCHEMA]
             return pa.table(arrays, schema=HISTORY_SCHEMA)
 
