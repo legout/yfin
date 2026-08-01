@@ -68,36 +68,72 @@ No date range — returns current snapshot (or rolling multi-period for statemen
 
 ```python
 VALUATION_TYPES = [
-    "ForwardPeRatio", "PsRatio", "PbRatio",
-    "EnterprisesValueEBITDARatio", "EnterprisesValueRevenueRatio",
-    "PeRatio", "MarketCap", "EnterpriseValue", "PegRatio",
+    "ForwardPeRatio",
+    "PsRatio",
+    "PbRatio",
+    "EnterprisesValueEBITDARatio",
+    "EnterprisesValueRevenueRatio",
+    "PeRatio",
+    "MarketCap",
+    "EnterpriseValue",
+    "PegRatio",
 ]
 
 INCOME_STATEMENT_TYPES = [
-    "TotalRevenue", "CostOfRevenue", "GrossProfit", "OperatingIncome",
-    "NetIncome", "EBIT", "EBITDA", "BasicEPS", "DilutedEPS",
-    "ResearchAndDevelopment", "SellingGeneralAndAdministration",
-    "InterestExpense", "TaxProvision", "DilutedAverageShares",
-    "BasicAverageShares", "OperatingExpense", "TotalExpenses",
-    "PretaxIncome", "NormalizedEBITDA",
+    "TotalRevenue",
+    "CostOfRevenue",
+    "GrossProfit",
+    "OperatingIncome",
+    "NetIncome",
+    "EBIT",
+    "EBITDA",
+    "BasicEPS",
+    "DilutedEPS",
+    "ResearchAndDevelopment",
+    "SellingGeneralAndAdministration",
+    "InterestExpense",
+    "TaxProvision",
+    "DilutedAverageShares",
+    "BasicAverageShares",
+    "OperatingExpense",
+    "TotalExpenses",
+    "PretaxIncome",
+    "NormalizedEBITDA",
 ]
 
 BALANCE_SHEET_TYPES = [
-    "TotalAssets", "TotalLiabilitiesNetMinorityInterest",
-    "StockholdersEquity", "TotalDebt", "LongTermDebt", "CurrentDebt",
-    "CashAndCashEquivalents", "Inventory", "Goodwill",
-    "NetPPE", "WorkingCapital", "RetainedEarnings",
-    "CurrentAssets", "CurrentLiabilities", "NetDebt",
-    "CommonStockEquity", "TangibleBookValue",
+    "TotalAssets",
+    "TotalLiabilitiesNetMinorityInterest",
+    "StockholdersEquity",
+    "TotalDebt",
+    "LongTermDebt",
+    "CurrentDebt",
+    "CashAndCashEquivalents",
+    "Inventory",
+    "Goodwill",
+    "NetPPE",
+    "WorkingCapital",
+    "RetainedEarnings",
+    "CurrentAssets",
+    "CurrentLiabilities",
+    "NetDebt",
+    "CommonStockEquity",
+    "TangibleBookValue",
 ]
 
 CASH_FLOW_TYPES = [
-    "OperatingCashFlow", "FreeCashFlow", "CapitalExpenditure",
-    "RepurchaseOfCapitalStock", "CashDividendsPaid",
-    "NetCommonStockIssuance", "Depreciation",
-    "StockBasedCompensation", "EndCashPosition",
+    "OperatingCashFlow",
+    "FreeCashFlow",
+    "CapitalExpenditure",
+    "RepurchaseOfCapitalStock",
+    "CashDividendsPaid",
+    "NetCommonStockIssuance",
+    "Depreciation",
+    "StockBasedCompensation",
+    "EndCashPosition",
     "NetIncomeFromContinuingOperations",
-    "LongTermDebtPayments", "IssuanceOfDebt",
+    "LongTermDebtPayments",
+    "IssuanceOfDebt",
 ]
 ```
 
@@ -120,6 +156,7 @@ async def fundamentals_async(
       then one column per requested type (float64 or int64).
     """
 
+
 def fundamentals(
     symbols: str | list[str],
     *,
@@ -135,12 +172,14 @@ def fundamentals(
 ### Arrow schema
 
 ```python
-FUNDAMENTALS_SCHEMA = pa.schema([
-    pa.field("symbol", pa.string()),
-    pa.field("asOfDate", pa.date32()),
-    # dynamic: one float64 field per requested type
-    # special: MarketCap, EnterpriseValue, BasicAverageShares → int64
-])
+FUNDAMENTALS_SCHEMA = pa.schema(
+    [
+        pa.field("symbol", pa.string()),
+        pa.field("asOfDate", pa.date32()),
+        # dynamic: one float64 field per requested type
+        # special: MarketCap, EnterpriseValue, BasicAverageShares → int64
+    ]
+)
 ```
 
 ### Implementation notes
@@ -196,6 +235,7 @@ async def quote_summary_async(
     For history-type modules (upgradeDowngradeHistory, insiderTransactions),
     returns one row per dated event.
     """
+
 
 def quote_summary(
     symbols: str | list[str],

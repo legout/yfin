@@ -251,7 +251,7 @@ class YahooAuth:
                 try:
                     await self._authenticate(state, route)
                     return state
-                except (YahooCrumbError, Exception):
+                except YahooCrumbError, Exception:
                     if state.can_switch_strategy():
                         state.switch_strategy()
                         continue

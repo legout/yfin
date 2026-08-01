@@ -10,16 +10,19 @@ Published on PyPI as `yfin-client`; imported as `yfin`.
 
 - **Batch quotes** via `query1.finance.yahoo.com/v7/finance/quote`
 - **Chart history** (OHLCV + dividends + splits) via `query1.finance.yahoo.com/v8/finance/chart/{symbol}`
+- **Fundamentals timeseries** for valuation, income, balance sheet, and cash flow data
+- **Quote summary** modules for profiles, statistics, financial data, analyst, and ownership data
 - Deterministic **pyarrow.Table** output with explicit schemas
 - Optional **Polars** conversion via the `polars` extra
 - Async and sync APIs; sync wrappers fail clearly inside a running event loop
+- Optional Rich/tqdm progress bars or headless progress callbacks
 - Two-strategy Yahoo cookie/crumb authentication (basic + CSRF fallback)
 - Per-proxy-route cookie/crumb isolation (no state leakage between proxies)
 
 ## What it does NOT do
 
 - No pandas, numpy, yfinance, yahooquery, requests, pendulum, or lxml
-- No quote summaries, company fundamentals, symbol search, or options
+- No symbol search or options
 - No free proxies or bypass/aggressive behavior
 - No compatibility layer for the legacy yfin API
 
@@ -28,9 +31,11 @@ Published on PyPI as `yfin-client`; imported as `yfin`.
 ```bash
 pip install yfin-client            # core (pyarrow output)
 pip install 'yfin-client[polars]'  # with Polars conversion
+pip install 'yfin-client[progress-rich]'  # optional Rich progress bar
+pip install 'yfin-client[progress-tqdm]'  # optional tqdm progress bar
 ```
 
-Requires `fastreq>=3.0.0`, which is resolved automatically from PyPI.
+Requires `fastreq>=3.2.0`, which is resolved automatically from PyPI.
 
 ## Usage
 
@@ -62,6 +67,14 @@ history = yfin.history(["AAPL"], period="1y")
 # Async equivalents
 quotes = await yfin.quotes_async(["AAPL", "MSFT"])
 history = await yfin.history_async(["AAPL"], period="1y")
+
+# Optional progress (disabled by default)
+history = await yfin.history_async(["AAPL", "MSFT"], period="1y", progress="rich")
+fundamentals = await yfin.fundamentals_async(
+    ["AAPL", "MSFT"],
+    types=yfin.VALUATION_TYPES,
+    progress_callback=lambda completed, total: print(f"{completed}/{total}"),
+)
 
 # Optional Polars conversion (requires 'yfin[polars]')
 df = yfin.to_polars(history)

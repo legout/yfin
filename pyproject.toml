@@ -1,20 +1,24 @@
 [project]
 name = "yfin-client"
-version = "1.1.0"
+version = "1.2.0"
 description = "Compact Python 3.14 Yahoo Finance client returning pyarrow.Table, built on fastreq."
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.14"
 authors = [{ name = "Volker Lorrmann", email = "volker.lorrmann@gmail.com" }]
-dependencies = ["fastreq[curl]>=3.1.0", "pyarrow>=18.0.0"]
+dependencies = ["fastreq[curl]>=3.2.0", "pyarrow>=18.0.0"]
 
 [project.optional-dependencies]
 polars = ["polars>=1.0.0"]
+progress-rich = ["rich>=13.0.0"]
+progress-tqdm = ["tqdm>=4.66.0"]
 
 [dependency-groups]
 dev = [
+  "duckdb>=1.5.5",
   "ipython>=9.15.0",
   "numpy>=2.5.1",
+  "polars>=1.43.0",
   "pytest>=8.0.0",
   "pytest-asyncio>=0.24.0",
   "ruff>=0.8.0",

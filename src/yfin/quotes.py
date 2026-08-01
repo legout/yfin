@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from typing import Any, Protocol, runtime_checkable
 
 import pyarrow as pa
+from fastreq.utils.progress import ProgressCallback, ProgressOption, gather_with_progress
 
 from .arrow import build_quote_table
 from .client import YahooClient
@@ -99,6 +100,8 @@ async def quotes_async(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     client: QuoteClient | None = None,
     proxy: str | None = None,
+    progress: ProgressOption = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> pa.Table:
     """Fetch batch quotes and return a deterministic Arrow table.
 
@@ -116,6 +119,10 @@ async def quotes_async(
         transient client is created when omitted.
     proxy
         Optional proxy URL for this request's route.
+    progress
+        Optional ``"rich"``/``"tqdm"`` progress bar, or ``True`` to auto-select.
+    progress_callback
+        Optional callback receiving ``(completed, total)``.
     """
     normalised = normalize_symbols(symbols)
     own_client = client is None
@@ -137,7 +144,13 @@ async def quotes_async(
             )
             for chunk in chunks
         ]
-        responses = await asyncio.gather(*tasks)
+        responses = await gather_with_progress(
+            tasks,
+            mode=progress,
+            callback=progress_callback,
+            description="Yahoo quote chunks",
+            return_exceptions=False,
+        )
 
         for resp in responses:
             results = _extract_quote_results(resp)
@@ -180,6 +193,8 @@ def quotes(
     chunk_size: int = DEFAULT_CHUNK_SIZE,
     client: QuoteClient | None = None,
     proxy: str | None = None,
+    progress: ProgressOption = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> pa.Table:
     """Synchronous wrapper for :func:`quotes_async`.
 
@@ -193,6 +208,8 @@ def quotes(
             chunk_size=chunk_size,
             client=client,
             proxy=proxy,
+            progress=progress,
+            progress_callback=progress_callback,
         )
     )
 

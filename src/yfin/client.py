@@ -210,7 +210,7 @@ def _parse_retry_after(resp: Any) -> float | None:
         return None
     try:
         return float(ra)
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return None
 
 

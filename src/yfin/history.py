@@ -12,6 +12,7 @@ from collections.abc import Sequence
 from typing import Any
 
 import pyarrow as pa
+from fastreq.utils.progress import ProgressCallback, ProgressOption, gather_with_progress
 
 from .arrow import build_history_table
 from .client import YahooClient
@@ -87,6 +88,8 @@ async def history_async(
     include_pre_post: bool = False,
     client: QuoteClient | None = None,
     proxy: str | None = None,
+    progress: ProgressOption = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> pa.Table:
     """Fetch historical OHLCV data and return a deterministic Arrow table.
 
@@ -110,6 +113,10 @@ async def history_async(
         Reuse an existing :class:`YahooClient`.
     proxy
         Optional proxy URL for this request's route.
+    progress
+        Optional ``"rich"``/``"tqdm"`` progress bar, or ``True`` to auto-select.
+    progress_callback
+        Optional callback receiving ``(completed, total)``.
     """
     normalised = normalize_symbols(symbols)
     own_client = client is None
@@ -131,7 +138,12 @@ async def history_async(
             )
             for symbol in normalised
         ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await gather_with_progress(
+            tasks,
+            mode=progress,
+            callback=progress_callback,
+            description="Yahoo history symbols",
+        )
 
         tables = []
         errors: list[str] = []
@@ -219,6 +231,8 @@ def history(
     include_pre_post: bool = False,
     client: QuoteClient | None = None,
     proxy: str | None = None,
+    progress: ProgressOption = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> pa.Table:
     """Synchronous wrapper for :func:`history_async`.
 
@@ -236,6 +250,8 @@ def history(
             include_pre_post=include_pre_post,
             client=client,
             proxy=proxy,
+            progress=progress,
+            progress_callback=progress_callback,
         )
     )
 

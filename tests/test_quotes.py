@@ -274,6 +274,19 @@ class TestQuotesAsync:
         )
         assert table.num_rows == 2
 
+    async def test_reports_progress(self) -> None:
+        from yfin.quotes import quotes_async
+
+        completed: list[tuple[int, int]] = []
+        client = _MockYahooClient(QUOTES_RESPONSE_2)
+        await quotes_async(
+            ["AAPL", "MSFT"],
+            chunk_size=1,
+            client=client,
+            progress_callback=lambda current, total: completed.append((current, total)),
+        )
+        assert completed == [(1, 2), (2, 2)]
+
     async def test_propagates_api_error(self) -> None:
         from yfin.quotes import quotes_async
 

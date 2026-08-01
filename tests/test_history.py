@@ -424,6 +424,17 @@ class TestHistoryAsync:
         aapl_first = symbols.index("AAPL")
         assert msft_first < aapl_first
 
+    async def test_reports_progress(self) -> None:
+        completed: list[tuple[int, int]] = []
+        client = _MockHistoryClient({"AAPL": CHART_NORMAL, "MSFT": CHART_NORMAL})
+        await history_async(
+            ["AAPL", "MSFT"],
+            period="1y",
+            client=client,
+            progress_callback=lambda current, total: completed.append((current, total)),
+        )
+        assert completed == [(1, 2), (2, 2)]
+
     async def test_error_response_raises(self) -> None:
         client = _MockHistoryClient({"BAD": CHART_ERROR})
         with pytest.raises(YahooApiError, match="Not Found"):

@@ -12,6 +12,7 @@ import datetime as dt
 from typing import Any
 
 import pyarrow as pa
+from fastreq.utils.progress import ProgressCallback, ProgressOption, gather_with_progress
 
 from .arrow import build_fundamentals_table
 from .client import YahooClient
@@ -183,6 +184,8 @@ async def fundamentals_async(
     end: dt.date | dt.datetime | int | None = None,
     client: QuoteClient | None = None,
     proxy: str | None = None,
+    progress: ProgressOption = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> pa.Table:
     """Fetch fundamentals timeseries and return a deterministic Arrow table.
 
@@ -202,6 +205,10 @@ async def fundamentals_async(
         Reuse an existing :class:`YahooClient`.
     proxy
         Optional proxy URL for this request's route.
+    progress
+        Optional ``"rich"``/``"tqdm"`` progress bar, or ``True`` to auto-select.
+    progress_callback
+        Optional callback receiving ``(completed, total)``.
     """
     normalised = normalize_symbols(symbols)
     own_client = client is None
@@ -220,7 +227,12 @@ async def fundamentals_async(
             )
             for symbol in normalised
         ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results = await gather_with_progress(
+            tasks,
+            mode=progress,
+            callback=progress_callback,
+            description="Yahoo fundamentals symbols",
+        )
 
         rows: list[dict[str, Any]] = []
         errors: list[str] = []
@@ -359,6 +371,8 @@ def fundamentals(
     end: dt.date | dt.datetime | int | None = None,
     client: QuoteClient | None = None,
     proxy: str | None = None,
+    progress: ProgressOption = None,
+    progress_callback: ProgressCallback | None = None,
 ) -> pa.Table:
     """Synchronous wrapper for :func:`fundamentals_async`.
 
@@ -373,6 +387,8 @@ def fundamentals(
             end=end,
             client=client,
             proxy=proxy,
+            progress=progress,
+            progress_callback=progress_callback,
         )
     )
 
