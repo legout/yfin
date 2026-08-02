@@ -17,6 +17,7 @@ progress-tqdm = ["tqdm>=4.66.0"]
 dev = [
   "duckdb>=1.5.5",
   "ipython>=9.15.0",
+  "mkdocstrings-python>=2.0.0",
   "numpy>=2.5.1",
   "polars>=1.43.0",
   "pytest>=8.0.0",
@@ -24,6 +25,7 @@ dev = [
   "ruff>=0.8.0",
   "ty>=0.0.1a1",
   "yahooquery>=2.4.1",
+  "zensical>=0.0.11",
 ]
 
 [build-system]

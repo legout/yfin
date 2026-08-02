@@ -6,6 +6,12 @@ browser TLS impersonation (the same trick that makes yahooquery reliable).
 
 Published on PyPI as `yfin-client`; imported as `yfin`.
 
+Full documentation (Diátaxis-structured): [docs/index.md](docs/index.md).
+Build it locally with `zensical build` from the `docs/` directory
+(`zensical serve` for live preview).
+
+## What it does
+
 ## What it does
 
 - **Batch quotes** via `query1.finance.yahoo.com/v7/finance/quote`

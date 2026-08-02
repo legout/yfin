@@ -1,0 +1,79 @@
+name: Deploy docs to GitHub Pages
+
+# Build and publish the Zensical site at https://legout.github.io/yfin/.
+#
+# Triggers:
+# - push to main when source/docs/workflow changes
+# - manual run (Actions → Deploy docs to GitHub Pages → Run workflow)
+#
+# One-time repo setup (do this before the first run):
+#   Settings → Pages → Source: "GitHub Actions"
+# The workflow creates the `github-pages` environment on first run; once
+# Pages is enabled with the GitHub Actions source, deploys go live.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "src/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/docs-deploy.yml"
+  workflow_dispatch:
+
+# Pages deploy requires pages: write + id-token: write (OIDC for the
+# deployment token). `contents: read` is needed for checkout.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys concurrently — wait for the in-flight one to
+# finish, otherwise the older artifact can win the race.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.14
+        run: uv python install 3.14
+
+      - name: Install zensical and mkdocstrings-python
+        run: |
+          uv venv --python 3.14 .venv-docs
+          source .venv-docs/bin/activate
+          uv pip install zensical mkdocstrings-python
+
+      # mkdocstrings needs to import yfin to introspect it for the
+      # auto-generated API reference. Building from the docs/ directory
+      # with PYTHONPATH=../src makes src/ importable.
+      - name: Build docs (strict)
+        run: |
+          source .venv-docs/bin/activate
+          cd docs
+          PYTHONPATH=../src zensical build --strict
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

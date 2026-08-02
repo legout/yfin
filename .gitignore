@@ -53,3 +53,6 @@ Thumbs.db
 # Env / secrets
 .env
 .env-local
+
+# Documentation build output (Zensical site_dir)
+docs/site/

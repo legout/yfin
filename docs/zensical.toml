@@ -1,0 +1,119 @@
+# Zensical configuration for the yfin user documentation.
+#
+# Source of truth lives in docs/. The build output goes to docs/site/ and is
+# gitignored. Plans and other internal docs under docs/plans/ are excluded
+# from the build via `exclude_docs`.
+
+[project]
+site_name = "yfin"
+site_description = "Compact Python 3.14 Yahoo Finance client returning pyarrow.Table"
+site_author = "Volker Lorrmann"
+copyright = "Copyright © Volker Lorrmann"
+site_url = "https://legout.github.io/yfin/"
+repo_url = "https://github.com/legout/yfin"
+repo_name = "legout/yfin"
+edit_uri = "edit/main/docs/"
+
+docs_dir = "."
+site_dir = "site"
+
+# Build output must not be served alongside the source markdown.
+exclude_docs = ["plans/", "site/", "zensical.toml"]
+
+# Follow Diátaxis: navigation groups the four documentation modes into
+# top-level sections so readers can self-select by intent.
+nav = [
+  { "Home" = "index.md" },
+  { "Tutorials" = [
+    "tutorials/index.md",
+    "tutorials/getting-started.md",
+    "tutorials/convert-to-polars.md",
+  ] },
+  { "How-to guides" = [
+    "how-to/index.md",
+    "how-to/fetch-quotes.md",
+    "how-to/fetch-history.md",
+    "how-to/fetch-fundamentals.md",
+    "how-to/fetch-summary-modules.md",
+    "how-to/configure-proxies.md",
+    "how-to/handle-errors-and-rate-limits.md",
+    "how-to/choose-sync-or-async.md",
+  ] },
+  { "Reference" = [
+    "reference/index.md",
+    "reference/api.md",
+    "reference/arrow-schemas.md",
+    "reference/module-groups.md",
+    "reference/exceptions.md",
+  ] },
+  { "Explanation" = [
+    "explanation/index.md",
+    "explanation/architecture.md",
+    "explanation/authentication-flow.md",
+    "explanation/arrow-output-design.md",
+    "explanation/unofficial-endpoints-and-pacing.md",
+  ] },
+]
+
+[project.theme]
+features = [
+  "navigation.instant",
+  "navigation.tracking",
+  "navigation.tabs",
+  "navigation.sections",
+  "navigation.top",
+  "search.suggest",
+  "search.highlight",
+  "content.code.copy",
+  "content.code.annotate",
+  "toc.follow",
+]
+
+# Strict build catches broken links, missing pages, and bad nav.
+[project.strict]
+
+# ----------------------------------------------------------------------------
+# Markdown extensions — keep most defaults, enable a few extras.
+# ----------------------------------------------------------------------------
+
+[project.markdown_extensions.admonition]
+[project.markdown_extensions.attr_list]
+[project.markdown_extensions.def_list]
+[project.markdown_extensions.footnotes]
+[project.markdown_extensions.md_in_html]
+[project.markdown_extensions.toc]
+permalink = true
+
+[project.markdown_extensions.pymdownx.details]
+[project.markdown_extensions.pymdownx.highlight]
+anchor_linenums = true
+pygments_lang_class = true
+[project.markdown_extensions.pymdownx.inlinehilite]
+[project.markdown_extensions.pymdownx.keys]
+[project.markdown_extensions.pymdownx.mark]
+[project.markdown_extensions.pymdownx.smartsymbols]
+[project.markdown_extensions.pymdownx.superfences]
+[project.markdown_extensions.pymdownx.tabbed]
+alternate_style = true
+combine_header_slug = true
+[project.markdown_extensions.pymdownx.tasklist]
+custom_checkbox = true
+[project.markdown_extensions.pymdownx.tilde]
+
+# ----------------------------------------------------------------------------
+# Plugins
+# ----------------------------------------------------------------------------
+
+[project.plugins.mkdocstrings.handlers.python]
+inventories = ["https://docs.python.org/3/objects.inv"]
+paths = ["../src"]
+
+[project.plugins.mkdocstrings.handlers.python.options]
+docstring_style = "google"
+inherited_members = true
+show_source = false
+show_root_heading = true
+show_root_full_path = false
+show_symbol_type_heading = true
+show_symbol_type_toc = true
+summary = true

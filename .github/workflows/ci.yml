@@ -51,3 +51,30 @@ jobs:
 
       - name: Import smoke
         run: source .venv/bin/activate && python -c "import yfin; print(yfin.__version__)"
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.14
+        run: uv python install 3.14
+
+      - name: Install zensical and mkdocstrings-python
+        run: |
+          uv venv --python 3.14 .venv-docs
+          source .venv-docs/bin/activate
+          uv pip install zensical mkdocstrings-python
+
+      # yfin itself is on the import path so mkdocstrings can introspect it.
+      - name: Build docs (strict)
+        run: |
+          source .venv-docs/bin/activate
+          cd docs
+          # Build from the repo root so mkdocstrings can resolve `../src/yfin`.
+          PYTHONPATH=../src zensical build --strict
