@@ -217,6 +217,48 @@ ERROR_RESPONSE = {
     }
 }
 
+# NOTE: deliberately contains NO quoteType / price / summaryDetail module —
+# Yahoo's real response for a modules=insiderTransactions request only
+# carries the requested module. Used to prove that the requested symbol
+# from the URL is the authoritative provenance source. Field names match
+# the live Yahoo payload (verified against the API on 2026-08-22).
+INSIDER_TRANSACTIONS_RESPONSE = {
+    "quoteSummary": {
+        "result": [
+            {
+                "insiderTransactions": {
+                    "maxAge": {"raw": 75, "fmt": "75"},
+                    "transactions": [
+                        {
+                            "id": "filings-0",
+                            "filerName": "TIMOTHY DONALD COOK",
+                            "filerRelation": "Director,CEO,Chief Executive Officer",
+                            "startDate": {"raw": 1752249600, "fmt": "2025-07-11"},
+                            "shares": {"raw": 3125, "fmt": "3,125"},
+                            "value": {"raw": 0.0, "fmt": "0.00"},
+                            "moneyText": "$0",
+                            "transactionText": "Sale of 3,125 shares of Apple Inc.",
+                            "ownership": "Y",
+                        },
+                        {
+                            "id": "filings-1",
+                            "filerName": "LORETTA M. MEYER",
+                            "filerRelation": "Director,Chief Financial Officer",
+                            "startDate": {"raw": 1751817600, "fmt": "2025-07-06"},
+                            "shares": {"raw": 2500, "fmt": "2,500"},
+                            "value": {"raw": 0.0, "fmt": "0.00"},
+                            "moneyText": "$0",
+                            "transactionText": "Sale of 2,500 shares of Apple Inc.",
+                            "ownership": "Y",
+                        },
+                    ],
+                },
+            }
+        ],
+        "error": None,
+    }
+}
+
 
 # ---------------------------------------------------------------------------
 # Mock clients
@@ -361,18 +403,88 @@ class TestBuildSummaryTable:
         assert pct == [0.0812, 0.0658]
 
     def test_calendar_events(self) -> None:
+        """Every candidate earnings date becomes its own row."""
         entry = CALENDAR_EVENTS_RESPONSE["quoteSummary"]["result"][0]
         table = build_summary_table([entry], ["calendarEvents"])
-        assert table.num_rows == 1
+        assert table.num_rows == 2
         div_date = table.column("calendar_events_dividend_date").to_pylist()
-        assert div_date == [1747180800]
         ex_div = table.column("calendar_events_ex_dividend_date").to_pylist()
-        assert ex_div == [1746921600]
-        # First earnings date extracted from list
+        assert div_date == [1747180800, 1747180800]
+        assert ex_div == [1746921600, 1746921600]
+        # Both candidate dates preserved, in Yahoo order
         ed = table.column("calendar_events_earnings_date").to_pylist()
-        assert ed == [1753920000]
+        assert ed == [1753920000, 1754006400]
+        # Estimates repeated on every row
         ea = table.column("calendar_events_earnings_earnings_average").to_pylist()
-        assert ea == [1.85]
+        assert ea == [1.85, 1.85]
+
+    def test_calendar_events_single_row_when_no_dates(self) -> None:
+        """Calendar with earnings block but no dates → one row, null date."""
+        entry = {
+            "quoteType": {"symbol": "AAPL"},
+            "calendarEvents": {
+                "dividendDate": {"raw": 1747180800, "fmt": "2025-05-14"},
+                "earnings": {
+                    "earningsAverage": {"raw": 1.9, "fmt": "1.90"},
+                },
+            },
+        }
+        table = build_summary_table([entry], ["calendarEvents"])
+        assert table.num_rows == 1
+        assert table.column("calendar_events_earnings_date").to_pylist() == [None]
+        assert table.column("calendar_events_earnings_earnings_average").to_pylist() == [1.9]
+
+    def test_calendar_events_without_earnings_block(self) -> None:
+        """Dividends only (no earnings dict) → single row with null date."""
+        entry = {
+            "quoteType": {"symbol": "AAPL"},
+            "calendarEvents": {
+                "dividendDate": {"raw": 1747180800, "fmt": "2025-05-14"},
+                "exDividendDate": {"raw": 1746921600, "fmt": "2025-05-11"},
+            },
+        }
+        table = build_summary_table([entry], ["calendarEvents"])
+        assert table.num_rows == 1
+        # The date column is present (stable schema), value is null.
+        assert table.column("calendar_events_earnings_date").to_pylist() == [None]
+        assert table.column("calendar_events_dividend_date").to_pylist() == [1747180800]
+
+    def test_calendar_events_schema_stable_across_symbols(self) -> None:
+        """One symbol with dates + one without → same schema, null filled."""
+        with_dates = {
+            "quoteType": {"symbol": "AAPL"},
+            "calendarEvents": {
+                "earnings": {"earningsDate": [{"raw": 1753920000, "fmt": "2025-07-31"}]},
+            },
+        }
+        without_dates = {
+            "quoteType": {"symbol": "MSFT"},
+            "calendarEvents": {
+                "dividendDate": {"raw": 1747180800, "fmt": "2025-05-14"},
+            },
+        }
+        table = build_summary_table([with_dates, without_dates], ["calendarEvents"])
+        assert "calendar_events_earnings_date" in table.column_names
+        dates = table.column("calendar_events_earnings_date").to_pylist()
+        symbols = table.column("symbol").to_pylist()
+        assert (dates, symbols) == (
+            [1753920000, None],
+            ["AAPL", "MSFT"],
+        )
+
+    def test_requested_symbol_key_stripped_from_output(self) -> None:
+        """Provider-internal provenance key never appears as a column."""
+        from yfin.arrow import REQUESTED_SYMBOL_KEY
+
+        entry = {
+            REQUESTED_SYMBOL_KEY: "AAPL",
+            "summaryDetail": {"beta": 1.0},
+        }
+        table = build_summary_table([entry], ["summaryDetail"])
+        assert table.num_rows == 1
+        assert table.column("symbol").to_pylist() == ["AAPL"]
+        assert "requested_symbol" not in table.column_names
+        assert "_requested_symbol" not in table.column_names
 
     def test_empty_raw_data(self) -> None:
         table = build_summary_table([], ["assetProfile"])
@@ -533,6 +645,87 @@ class TestQuoteSummaryAsync:
         client = _ErrorSummaryClient(YahooApiError("network failure"))
         with pytest.raises(YahooApiError, match="All 1 symbols failed"):
             await quote_summary_async(["AAPL"], ["assetProfile"], client=client)
+
+    # -- symbol provenance regressions ---------------------------------
+    #
+    # ``insiderTransactions`` and ``calendarEvents`` responses carry no
+    # symbol-bearing module (no quoteType/price/summaryDetail), so the Arrow
+    # builder must use the provider's requested-symbol provenance instead of
+    # emitting an empty ``symbol`` for every row.
+
+    async def test_summary_insider_transactions_symbol_provenance(self) -> None:
+        from yfin.summary import insider_transactions_async
+
+        client = _MockSummaryClient({"AAPL": INSIDER_TRANSACTIONS_RESPONSE})
+        table = await insider_transactions_async(["AAPL"], client=client)
+        assert table.num_rows == 2
+        # The requested symbol must survive end-to-end on every row.
+        assert table.column("symbol").to_pylist() == ["AAPL", "AAPL"]
+        shares = table.column("insider_transactions_shares").to_pylist()
+        assert shares == [3125, 2500]
+
+    async def test_summary_calendar_events_symbol_provenance(self) -> None:
+        from yfin.summary import calendar_events_async
+
+        # Deliberately no quoteType/price/summaryDetail — only the
+        # calendarEvents payload (as Yahoo returns for a narrow request).
+        resp = {
+            "quoteSummary": {
+                "result": [
+                    {
+                        "calendarEvents": {
+                            "dividendDate": {"raw": 1747180800, "fmt": "2025-05-14"},
+                            "earnings": {
+                                "earningsDate": [
+                                    {"raw": 1753920000, "fmt": "2025-07-31"},
+                                    {"raw": 1754006400, "fmt": "2025-08-01"},
+                                ],
+                                "earningsAverage": {"raw": 1.85, "fmt": "1.85"},
+                            },
+                        }
+                    }
+                ],
+                "error": None,
+            }
+        }
+        client = _MockSummaryClient({"AAPL": resp})
+        table = await calendar_events_async(["AAPL"], client=client)
+        # Two candidate earnings dates → two rows, each tagged AAPL.
+        assert table.num_rows == 2
+        assert table.column("symbol").to_pylist() == ["AAPL", "AAPL"]
+        assert table.column("calendar_events_earnings_date").to_pylist() == [
+            1753920000,
+            1754006400,
+        ]
+
+    async def test_summary_provenance_multi_symbol_narrow(self) -> None:
+        """Two symbols, same narrow module — no collision on empty symbol."""
+        from yfin.summary import quote_summary_async
+
+        responses = {
+            sym: {
+                "quoteSummary": {
+                    "result": [
+                        {
+                            "insiderTransactions": {
+                                "transactions": [
+                                    {
+                                        "filerName": "INSIDER",
+                                        "shares": {"raw": 100, "fmt": "100"},
+                                    }
+                                ]
+                            }
+                        }
+                    ],
+                    "error": None,
+                }
+            }
+            for sym in ("AAPL", "MSFT")
+        }
+        client = _MockSummaryClient(responses)
+        table = await quote_summary_async(["AAPL", "MSFT"], ["insiderTransactions"], client=client)
+        assert table.num_rows == 2
+        assert sorted(table.column("symbol").to_pylist()) == ["AAPL", "MSFT"]
 
 
 # ---------------------------------------------------------------------------

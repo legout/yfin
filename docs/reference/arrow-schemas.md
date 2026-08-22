@@ -78,14 +78,30 @@ Column names are the Yahoo type names converted to snake_case
 column names are dotted, then converted to snake_case with `.` replaced by
 `_`:
 
-| Module kind               | Example column                                | Row shape                |
-|---------------------------|-----------------------------------------------|--------------------------|
-| Flat (assetProfile, …)    | `asset_profile.industry`                      | one row per symbol       |
-| Calendar (calendarEvents) | `calendar_events.earnings_date`               | one row per symbol       |
-| Event (upgradeDowngrade…) | `upgrade_downgrade_history.action`            | one row per event        |
+| Module kind               | Example column                                | Row shape                      |
+|---------------------------|-----------------------------------------------|--------------------------------|
+| Flat (assetProfile, …)    | `asset_profile.industry`                      | one row per symbol             |
+| Calendar (calendarEvents) | `calendar_events.earnings_date`               | one row per candidate date (1+) |
+| Event (upgradeDowngrade…) | `upgrade_downgrade_history.action`            | one row per event              |
+
+The calendarEvents module produces one row per candidate earnings date
+(Yahoo may return several); dividend dates and earnings estimates are
+repeated on each row so a downstream view can pick the newest row per
+symbol as the current calendar snapshot. If the payload carries no
+earnings dates, a single row is produced with a null
+`calendar_events.earnings_date`.
 
 The flat rows and event rows are concatenated row-wise. Event rows have
 nulls in the flat-only columns and vice versa.
+
+**Symbol provenance.** Every quoteSummary result entry carries the
+normalised requested symbol under `REQUESTED_SYMBOL_KEY`
+(`"_requested_symbol"`), set by the provider. `build_summary_table`
+prefers it as the `symbol` value and strips it before flattening, so
+narrow requests (e.g. `modules=["insiderTransactions"]` or
+`modules=["calendarEvents"]`, which return no symbol-bearing module)
+still yield correct per-symbol rows instead of an empty `symbol` on
+every row.
 
 ## Interval
 

@@ -12,7 +12,7 @@ from typing import Any
 
 import pyarrow as pa
 
-from .arrow import build_summary_table
+from .arrow import REQUESTED_SYMBOL_KEY, build_summary_table
 from .client import YahooClient
 from .exceptions import YahooApiError
 from .models import YahooRoute, normalize_symbols
@@ -25,6 +25,7 @@ __all__ = [
     "CALENDAR_MODULES",
     "ANALYST_MODULES",
     "OWNERSHIP_MODULES",
+    "INSIDER_TRANSACTIONS_MODULES",
     "ALL_SUMMARY_MODULES",
     # Generic entrypoint
     "quote_summary_async",
@@ -70,6 +71,9 @@ OWNERSHIP_MODULES = [
     "insiderHolders",
     "insiderTransactions",
 ]
+# Dedicated group for the insiderTransactions array module (parallel to
+# CALENDAR_MODULES for the calendarEvents module).
+INSIDER_TRANSACTIONS_MODULES = ["insiderTransactions"]
 ALL_SUMMARY_MODULES = [
     *PROFILE_MODULES,
     *STATS_MODULES,
@@ -171,7 +175,13 @@ async def _fetch_one(
     url = _SUMMARY_URL.format(symbol=symbol)
     params = {"modules": ",".join(modules)}
     resp = await client.get_json(url, params=params, route=route)
-    return _extract_summary_result(resp, symbol)
+    result = _extract_summary_result(resp, symbol)
+    # Carry the requested symbol as authoritative provenance for the Arrow
+    # builder. Narrow requests (insiderTransactions / calendarEvents only)
+    # return no symbol-bearing module, so without this the flattener would
+    # emit an empty ``symbol`` for every row.
+    result[REQUESTED_SYMBOL_KEY] = symbol
+    return result
 
 
 def _extract_summary_result(resp: Any, symbol: str) -> dict[str, Any]:
@@ -291,8 +301,15 @@ async def insider_transactions_async(
     client: QuoteClient | None = None,
     proxy: str | None = None,
 ) -> pa.Table:
-    """Fetch the insiderTransactions module."""
-    return await quote_summary_async(symbols, ["insiderTransactions"], client=client, proxy=proxy)
+    """``insiderTransactions`` module (one row per filed transaction).
+
+    Note: Yahoo returns only the recent Form 4 history (typically a few
+    dozen rows per symbol). Suitable for continuous capture, not for a
+    comprehensive historical backfill — for that, use SEC EDGAR directly.
+    """
+    return await quote_summary_async(
+        symbols, INSIDER_TRANSACTIONS_MODULES, client=client, proxy=proxy
+    )
 
 
 # ---------------------------------------------------------------------------

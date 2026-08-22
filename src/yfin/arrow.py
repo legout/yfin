@@ -21,6 +21,7 @@ __all__ = [
     "build_summary_table",
     "build_fundamentals_table",
     "INTEGER_TYPES",
+    "REQUESTED_SYMBOL_KEY",
     "to_polars",
 ]
 
@@ -293,6 +294,13 @@ _ARRAY_SUMMARY_MODULES: dict[str, str] = {
 # Calendar module is flat-with-nested-earnings; handled specially below.
 _CALENDAR_MODULE = "calendarEvents"
 
+# Key inside a raw quoteSummary result dict carrying the normalised requested
+# symbol. Set by the provider (``summary._fetch_one``) and consumed by
+# ``build_summary_table`` as the authoritative symbol source, preferred over
+# any symbol found inside the module payloads. Raw Yahoo payloads never
+# contain this key, so the builder always ignores it as a data field.
+REQUESTED_SYMBOL_KEY = "_requested_symbol"
+
 
 def _extract_raw(value: Any) -> Any:
     """Unwrap a Yahoo ``{"raw": X, "fmt": ...}`` wrapper to *X*.
@@ -319,15 +327,24 @@ def build_summary_table(
     (a mapping of module name → module payload). *modules* is the list of
     module names that were requested and should be materialised as columns.
 
-    FLAT modules (assetProfile, summaryDetail, …) and CALENDAR modules produce
-    one combined row per symbol — all scalar fields are merged into a single
-    wide row.
+    FLAT modules (assetProfile, summaryDetail, …) produce one combined row
+    per symbol — all scalar fields are merged into a single wide row.
+
+    CALENDAR (calendarEvents) produces one row **per candidate earnings
+    date** (Yahoo may return several), repeating dividend dates and
+    earnings estimates on each row.
 
     ARRAY modules (upgradeDowngradeHistory, institutionOwnership, …) produce
     one row per event, each tagged with the symbol.
 
-    The per-symbol flat table and the per-event array table are concatenated
-    row-wise (array rows carry nulls for flat columns and vice versa).
+    Per-symbol rows (flat + calendar) and per-event array rows are
+    concatenated row-wise (array rows carry nulls for flat columns and
+    vice versa).
+
+    Symbol provenance: each entry may carry the normalised requested symbol
+    under :data:`REQUESTED_SYMBOL_KEY` (set by the quoteSummary provider).
+    It is used as the authoritative ``symbol`` value and stripped before
+    module payloads are flattened.
     """
     if not raw_data:
         return _empty_summary_table()
@@ -337,7 +354,11 @@ def build_summary_table(
 
     for entry in raw_data:
         symbol = _entry_symbol(entry)
-        # Merge all flat + calendar modules for this symbol into one row.
+        # Strip the provider-internal provenance field so it is never
+        # treated as module data (e.g. iterated when flattening payloads).
+        entry = {key: value for key, value in entry.items() if key != REQUESTED_SYMBOL_KEY}
+        # Calendar produces one row per candidate earnings date; every
+        # other flat/calendar field is folded into a single combined row.
         scalar_row: dict[str, Any] = {"symbol": symbol}
         has_scalar = False
         for module in modules:
@@ -348,8 +369,9 @@ def build_summary_table(
                 scalar_row.update(_flatten_module(symbol, module, payload))
                 has_scalar = True
             elif module == _CALENDAR_MODULE:
-                scalar_row.update(_flatten_calendar(symbol, payload))
-                has_scalar = True
+                # One row per candidate earnings date (Yahoo may return
+                # several); dividend dates and estimates are repeated.
+                scalar_rows.extend(_flatten_calendar(symbol, payload))
             elif module in _ARRAY_SUMMARY_MODULES:
                 list_key = _ARRAY_SUMMARY_MODULES[module]
                 events = payload.get(list_key)
@@ -357,6 +379,11 @@ def build_summary_table(
                     for event in events:
                         if isinstance(event, dict):
                             array_rows.append(_flatten_event(symbol, module, list_key, event))
+        # Emit the combined flat row when flat modules contributed fields.
+        # For calendar-only entries the calendar rows already cover the
+        # entry and scalar_row would be a bare ``{"symbol": symbol}``
+        # duplicate — ``has_scalar`` stays False in that case, so it is
+        # skipped automatically.
         if has_scalar:
             scalar_rows.append(scalar_row)
 
@@ -374,12 +401,23 @@ def build_summary_table(
 
 
 def _entry_symbol(entry: dict[str, Any]) -> str:
-    """Best-effort extraction of the symbol from a result entry."""
+    """Determine the symbol for a result entry.
+
+    The requested symbol carried in :data:`REQUESTED_SYMBOL_KEY` is the
+    authoritative source: narrow requests (e.g. ``insiderTransactions`` or
+    ``calendarEvents`` only) do not include any of the symbol-bearing
+    modules, and the payload-derived fields below would return ``""``.
+    The module-derived keys remain as a fallback for raw payloads built
+    outside the provider (e.g. hand-crafted test fixtures).
+    """
+    requested = entry.get(REQUESTED_SYMBOL_KEY)
+    if isinstance(requested, str) and requested:
+        return requested.upper()
     for key in ("quoteType", "price", "summaryDetail"):
         sub = entry.get(key)
         if isinstance(sub, dict):
             sym = sub.get("symbol")
-            if isinstance(sym, str):
+            if isinstance(sym, str) and sym:
                 return sym.upper()
     return ""
 
@@ -427,24 +465,44 @@ def _flatten_event(
     return row
 
 
-def _flatten_calendar(symbol: str, payload: dict[str, Any]) -> dict[str, Any]:
-    """Flatten the calendarEvents module into one row per symbol."""
-    row: dict[str, Any] = {"symbol": symbol}
+def _flatten_calendar(symbol: str, payload: dict[str, Any]) -> list[dict[str, Any]]:
+    """Flatten the calendarEvents module into one row per candidate date.
+
+    Yahoo may return several ``earningsDate`` candidates per symbol
+    (e.g. a scheduled plus a revised date). Instead of silently keeping
+    only the first, every candidate date becomes its own row. All
+    non-earnings fields (dividend dates) and the earnings estimates
+    (EPS/revenue) are repeated on each row so a downstream view can pick
+    the newest row per symbol as the current calendar snapshot.
+
+    Returns one row with a null ``calendarEvents.earningsDate`` when the
+    payload carries no candidate dates, so the date column is always
+    present in the output schema.
+    """
+    base: dict[str, Any] = {"symbol": symbol, "calendarEvents.earningsDate": None}
+    earnings: dict[str, Any] | None = None
+    dates: list[Any] = []
     for key, value in payload.items():
         if key == "earnings" and isinstance(value, dict):
             earnings = value
-            # earningsDate is a list of {"raw": epoch} objects.
-            ed = earnings.get("earningsDate")
-            if isinstance(ed, list) and ed:
-                first = ed[0] if isinstance(ed[0], dict) else {}
-                row["calendarEvents.earningsDate"] = _extract_raw(first)
-            for ek, ev in earnings.items():
-                if ek == "earningsDate":
-                    continue
-                row[f"calendarEvents.earnings.{ek}"] = _extract_raw(ev)
         else:
-            row[f"calendarEvents.{key}"] = _extract_raw(value)
-    return row
+            base[f"calendarEvents.{key}"] = _extract_raw(value)
+
+    if earnings is not None:
+        for item in earnings.get("earningsDate") or []:
+            if isinstance(item, dict):
+                dates.append(item.get("raw"))
+        extra: dict[str, Any] = {
+            f"calendarEvents.earnings.{ek}": _extract_raw(ev)
+            for ek, ev in earnings.items()
+            if ek != "earningsDate"
+        }
+    else:
+        extra = {}
+
+    if not dates:
+        return [{**base, **extra}]
+    return [{**base, **extra, "calendarEvents.earningsDate": d} for d in dates]
 
 
 def _rows_to_table(rows: list[dict[str, Any]]) -> pa.Table:

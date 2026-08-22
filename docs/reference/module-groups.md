@@ -118,6 +118,16 @@ Convenience wrappers:
 [`yfin.institution_ownership`](../reference/api.md),
 [`yfin.insider_transactions`](../reference/api.md).
 
+### `INSIDER_TRANSACTIONS_MODULES`
+
+`["insiderTransactions"]`
+
+Dedicated group for the insider-transactions array module, parallel to
+`CALENDAR_MODULES`. Same single module as the `insiderTransactions` member
+of `OWNERSHIP_MODULES`, but usable on its own. Convenience wrapper:
+[`yfin.insider_transactions`](../reference/api.md).
+
 ### `ALL_SUMMARY_MODULES`
 
-Concatenation of all five groups above. Roughly 50 columns.
+Concatenation of the groups above (insiderTransactions appears once, via
+`OWNERSHIP_MODULES`). Roughly 50 columns.

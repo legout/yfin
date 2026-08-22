@@ -25,7 +25,8 @@ The convenience wrappers (`asset_profile`, `summary_detail`, `key_statistics`,
 `recommendation_trend`, `institution_ownership`, `insider_transactions`) are
 thin async functions that call `quote_summary_async` with the right module
 list. See [Reference / Module groups](../reference/module-groups.md#summary)
-for what's in each group.
+for what's in each group. `INSIDER_TRANSACTIONS_MODULES` is the dedicated
+single-module group behind `insider_transactions`.
 
 ## Pass arbitrary modules
 
@@ -73,6 +74,19 @@ Some modules (`upgradeDowngradeHistory`, `institutionOwnership`,
 `insiderTransactions`, …) produce one row **per event** rather than one row
 per symbol. yfin concatenates flat rows and event rows into the same table;
 event rows have nulls in the flat-only columns and vice versa.
+
+`calendarEvents` is the other special case: it yields one row **per
+candidate earnings date** (Yahoo may supply several dates), repeating
+dividend dates and EPS/revenue estimates on every row. A symbol whose
+payload has no earnings dates produces a single row with a null
+`calendar_events.earnings_date`.
+
+**Symbol provenance.** For narrow requests such as
+`modules=["insiderTransactions"]` or `modules=["calendarEvents"]` Yahoo
+returns no symbol-bearing module at all. yfin tags each result entry with
+the requested symbol (`REQUESTED_SYMBOL_KEY`) and the flattener uses it as
+the authoritative `symbol` column, so every row is correctly attributed
+regardless of which modules were requested.
 
 ## All modules at once
 

@@ -23,6 +23,7 @@ from __future__ import annotations
 from typing import Any
 
 from .arrow import (
+    REQUESTED_SYMBOL_KEY,
     build_fundamentals_table,
     build_history_table,
     build_quote_table,
@@ -65,6 +66,7 @@ from .summary import (
     ALL_SUMMARY_MODULES,
     ANALYST_MODULES,
     CALENDAR_MODULES,
+    INSIDER_TRANSACTIONS_MODULES,
     OWNERSHIP_MODULES,
     PROFILE_MODULES,
     STATS_MODULES,
@@ -90,7 +92,7 @@ from .summary import (
     upgrade_downgrade_history_async,
 )
 
-__version__ = "1.2.0"
+__version__ = "1.3.0"
 
 __all__ = [
     "__version__",
@@ -135,6 +137,7 @@ __all__ = [
     "CALENDAR_MODULES",
     "ANALYST_MODULES",
     "OWNERSHIP_MODULES",
+    "INSIDER_TRANSACTIONS_MODULES",
     "ALL_SUMMARY_MODULES",
     # Polars
     "to_polars",
@@ -157,6 +160,7 @@ __all__ = [
     "build_history_table",
     "build_fundamentals_table",
     "build_summary_table",
+    "REQUESTED_SYMBOL_KEY",
     # Exceptions
     "YahooError",
     "YahooAuthError",
