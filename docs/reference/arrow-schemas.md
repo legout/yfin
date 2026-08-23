@@ -94,6 +94,15 @@ earnings dates, a single row is produced with a null
 The flat rows and event rows are concatenated row-wise. Event rows have
 nulls in the flat-only columns and vice versa.
 
+**Column prefixes.** The module-name prefix prevents collisions when
+several modules share field names (`maxAge` exists in nearly every
+module). Single-module convenience wrappers strip the prefix by default
+via `strip_prefix=True` (`insider_transactions_shares` → `shares`);
+`strip_prefix=False` keeps prefixed names. Multi-module wrappers default
+to keeping prefixes. `yfin.strip_summary_prefixes(table, modules)`
+applies the same stripping to any existing table and raises
+`ValueError` when stripping would merge distinct columns.
+
 **Symbol provenance.** Every quoteSummary result entry carries the
 normalised requested symbol under `REQUESTED_SYMBOL_KEY`
 (`"_requested_symbol"`), set by the provider. `build_summary_table`

@@ -618,7 +618,7 @@ class TestQuoteSummaryAsync:
         client = _MockSummaryClient({"AAPL": UPGRADE_DOWNGRADE_RESPONSE})
         table = await upgrade_downgrade_history_async(["AAPL"], client=client)
         assert table.num_rows == 3
-        firms = table.column("upgrade_downgrade_history_firm").to_pylist()
+        firms = table.column("firm").to_pylist()
         assert "Morgan Stanley" in firms
         assert "HSBC" in firms
         assert "Barclays" in firms
@@ -661,8 +661,18 @@ class TestQuoteSummaryAsync:
         assert table.num_rows == 2
         # The requested symbol must survive end-to-end on every row.
         assert table.column("symbol").to_pylist() == ["AAPL", "AAPL"]
-        shares = table.column("insider_transactions_shares").to_pylist()
+        # Single-module wrapper strips the module prefix by default.
+        assert "insider_transactions_shares" not in table.column_names
+        shares = table.column("shares").to_pylist()
         assert shares == [3125, 2500]
+
+    async def test_summary_insider_transactions_keep_prefix(self) -> None:
+        from yfin.summary import insider_transactions_async
+
+        client = _MockSummaryClient({"AAPL": INSIDER_TRANSACTIONS_RESPONSE})
+        table = await insider_transactions_async(["AAPL"], strip_prefix=False, client=client)
+        assert "insider_transactions_shares" in table.column_names
+        assert table.column("insider_transactions_shares").to_pylist() == [3125, 2500]
 
     async def test_summary_calendar_events_symbol_provenance(self) -> None:
         from yfin.summary import calendar_events_async
@@ -693,7 +703,8 @@ class TestQuoteSummaryAsync:
         # Two candidate earnings dates → two rows, each tagged AAPL.
         assert table.num_rows == 2
         assert table.column("symbol").to_pylist() == ["AAPL", "AAPL"]
-        assert table.column("calendar_events_earnings_date").to_pylist() == [
+        # Single-module wrapper strips the module prefix by default.
+        assert table.column("earnings_date").to_pylist() == [
             1753920000,
             1754006400,
         ]
@@ -761,3 +772,143 @@ class TestSummarySync:
                 asset_profile(["AAPL"], client=_MockSummaryClient({"AAPL": ASSET_PROFILE_RESPONSE}))
 
         asyncio.run(_run_in_loop())
+
+
+# ---------------------------------------------------------------------------
+# strip_summary_prefixes + strip_prefix kwarg
+# ---------------------------------------------------------------------------
+
+
+class TestStripSummaryPrefixes:
+    def test_strips_single_module_prefix(self) -> None:
+        from yfin.arrow import strip_summary_prefixes
+
+        entry = INSIDER_TRANSACTIONS_RESPONSE["quoteSummary"]["result"][0]
+        table = build_summary_table([entry], ["insiderTransactions"])
+        stripped = strip_summary_prefixes(table, ["insiderTransactions"])
+        assert "symbol" in stripped.column_names
+        assert "shares" in stripped.column_names
+        assert "filer_name" in stripped.column_names
+        assert "insider_transactions_shares" not in stripped.column_names
+
+    def test_accepts_single_module_string(self) -> None:
+        from yfin.arrow import strip_summary_prefixes
+
+        entry = INSIDER_TRANSACTIONS_RESPONSE["quoteSummary"]["result"][0]
+        table = build_summary_table([entry], ["insiderTransactions"])
+        stripped = strip_summary_prefixes(table, "insiderTransactions")
+        assert "shares" in stripped.column_names
+
+    def test_leaves_other_module_columns_untouched(self) -> None:
+        from yfin.arrow import strip_summary_prefixes
+
+        entry = {
+            "quoteType": {"symbol": "AAPL"},
+            "summaryDetail": {"beta": 1.0},
+            "insiderTransactions": {"transactions": [{"filerName": "X"}]},
+        }
+        table = build_summary_table([entry], ["summaryDetail", "insiderTransactions"])
+        stripped = strip_summary_prefixes(table, ["insiderTransactions"])
+        # Only the requested module's prefix is removed.
+        assert "summary_detail_beta" in stripped.column_names
+        assert "filer_name" in stripped.column_names
+
+    def test_collision_raises(self) -> None:
+        from yfin.arrow import strip_summary_prefixes
+
+        # assetProfile and quoteType both carry maxAge → stripping both
+        # would merge asset_profile_max_age and quote_type_max_age into
+        # max_age.
+        entry = {
+            "quoteType": {"symbol": "AAPL", "maxAge": 1},
+            "assetProfile": {"sector": "Technology", "maxAge": 1},
+        }
+        table = build_summary_table([entry], ["assetProfile", "quoteType"])
+        with pytest.raises(ValueError, match="merge distinct columns"):
+            strip_summary_prefixes(table, ["assetProfile", "quoteType"])
+
+    def test_nested_prefixes_attributed_to_most_specific_module(self) -> None:
+        from yfin.arrow import strip_summary_prefixes
+
+        # earnings_history_quarter belongs to earningsHistory (array module),
+        # not to earnings — despite earnings_ being a prefix of
+        # earnings_history_.
+        entry = {
+            "quoteType": {"symbol": "AAPL"},
+            "earningsHistory": {"history": [{"quarter": "Q3 2025"}]},
+        }
+        table = build_summary_table([entry], ["earningsHistory"])
+        stripped = strip_summary_prefixes(table, ["earningsHistory"])
+        assert "quarter" in stripped.column_names
+        assert "earnings_history_quarter" not in stripped.column_names
+
+    async def test_quote_summary_strip_prefix_kwarg(self) -> None:
+        from yfin.summary import quote_summary_async
+
+        client = _MockSummaryClient({"AAPL": INSIDER_TRANSACTIONS_RESPONSE})
+        table = await quote_summary_async(
+            ["AAPL"], ["insiderTransactions"], strip_prefix=True, client=client
+        )
+        assert "shares" in table.column_names
+
+    async def test_quote_summary_strip_prefix_collision_raises(self) -> None:
+        from yfin.summary import quote_summary_async
+
+        entry = {
+            "quoteType": {"symbol": "AAPL", "maxAge": 1},
+            "assetProfile": {"sector": "Technology", "maxAge": 1},
+        }
+        resp = {"quoteSummary": {"result": [entry], "error": None}}
+        client = _MockSummaryClient({"AAPL": resp})
+        with pytest.raises(ValueError, match="merge distinct columns"):
+            await quote_summary_async(
+                ["AAPL"], ["assetProfile", "quoteType"], strip_prefix=True, client=client
+            )
+
+    async def test_quote_summary_unknown_module_raises(self) -> None:
+        from yfin.summary import quote_summary_async
+
+        client = _MockSummaryClient({})
+        with pytest.raises(ValueError, match="Unknown quoteSummary module"):
+            await quote_summary_async(["AAPL"], ["earningHistory"], client=client)
+
+    async def test_new_wrappers_single_module_and_stripped(self) -> None:
+        from yfin.summary import earnings_history_async
+
+        resp = {
+            "quoteSummary": {
+                "result": [
+                    {
+                        "earningsHistory": {
+                            "history": [
+                                {
+                                    "quarter": "3Q FY2025",
+                                    "epsActual": {"raw": 1.87},
+                                    "epsEstimate": {"raw": 1.85},
+                                    "surprisePercent": {"raw": 1.08},
+                                }
+                            ]
+                        }
+                    }
+                ],
+                "error": None,
+            }
+        }
+        client = _MockSummaryClient({"AAPL": resp})
+        table = await earnings_history_async(["AAPL"], client=client)
+        assert table.num_rows == 1
+        assert table.column("symbol").to_pylist() == ["AAPL"]
+        assert "quarter" in table.column_names
+        assert "eps_actual" in table.column_names
+        assert "surprise_percent" in table.column_names
+        assert "earnings_history_quarter" not in table.column_names
+
+    async def test_multi_module_wrappers_keep_prefix_by_default(self) -> None:
+        from yfin.summary import asset_profile_async
+
+        client = _MockSummaryClient({"AAPL": ASSET_PROFILE_RESPONSE})
+        table = await asset_profile_async(["AAPL"], client=client)
+        # Multi-module wrappers default to strip_prefix=False (maxAge would
+        # collide across assetProfile and quoteType).
+        assert "asset_profile_sector" in table.column_names
+        assert "quote_type_exchange" in table.column_names

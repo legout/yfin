@@ -22,11 +22,20 @@ ownership = yfin.institution_ownership(["AAPL"])
 
 The convenience wrappers (`asset_profile`, `summary_detail`, `key_statistics`,
 `financial_data`, `calendar_events`, `upgrade_downgrade_history`,
-`recommendation_trend`, `institution_ownership`, `insider_transactions`) are
-thin async functions that call `quote_summary_async` with the right module
-list. See [Reference / Module groups](../reference/module-groups.md#summary)
+`recommendation_trend`, `institution_ownership`, `fund_ownership`,
+`insider_holders`, `major_holders_breakdown`, `major_direct_holders`,
+`net_share_purchase_activity`, `insider_transactions`, `earnings`,
+`earnings_history`) are thin functions that call `quote_summary_async` with
+the right module list. See [Reference / Module groups](../reference/module-groups.md#summary)
 for what's in each group. `INSIDER_TRANSACTIONS_MODULES` is the dedicated
 single-module group behind `insider_transactions`.
+
+Single-module wrappers strip the module prefix from column names by
+default (`insider_transactions_shares` → `shares`); pass
+`strip_prefix=False` to keep the prefixed names. Multi-module wrappers
+(`asset_profile`, `summary_detail`) keep prefixes by default because their
+modules share field names. `yfin.SUMMARY_MODULES` lists every module
+`quote_summary` accepts.
 
 ## Pass arbitrary modules
 

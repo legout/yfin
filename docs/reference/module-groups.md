@@ -104,10 +104,11 @@ Convenience wrapper: [`yfin.calendar_events`](../reference/api.md).
 
 ### `ANALYST_MODULES`
 
-`["upgradeDowngradeHistory", "recommendationTrend", "earningHistory"]`
+`["upgradeDowngradeHistory", "recommendationTrend", "earningsHistory"]`
 
 Convenience wrappers: [`yfin.upgrade_downgrade_history`](../reference/api.md),
-[`yfin.recommendation_trend`](../reference/api.md).
+[`yfin.recommendation_trend`](../reference/api.md),
+[`yfin.earnings_history`](../reference/api.md).
 
 ### `OWNERSHIP_MODULES`
 
@@ -116,6 +117,9 @@ Convenience wrappers: [`yfin.upgrade_downgrade_history`](../reference/api.md),
 
 Convenience wrappers:
 [`yfin.institution_ownership`](../reference/api.md),
+[`yfin.fund_ownership`](../reference/api.md),
+[`yfin.major_holders_breakdown`](../reference/api.md),
+[`yfin.insider_holders`](../reference/api.md),
 [`yfin.insider_transactions`](../reference/api.md).
 
 ### `INSIDER_TRANSACTIONS_MODULES`
@@ -127,7 +131,37 @@ Dedicated group for the insider-transactions array module, parallel to
 of `OWNERSHIP_MODULES`, but usable on its own. Convenience wrapper:
 [`yfin.insider_transactions`](../reference/api.md).
 
+### `TREND_MODULES`
+
+`["indexTrend", "sectorTrend", "pageViews"]`
+
+Index/sector valuation trends and page-view momentum. No dedicated
+wrapper — request via `quote_summary`.
+
 ### `ALL_SUMMARY_MODULES`
 
 Concatenation of the groups above (insiderTransactions appears once, via
-`OWNERSHIP_MODULES`). Roughly 50 columns.
+`OWNERSHIP_MODULES`).
+
+### `SUMMARY_MODULES`
+
+Sorted registry of **every** quoteSummary module yfin can materialise
+(24 modules). `quote_summary` validates its `modules` argument against
+this list and raises `ValueError` for unknown names — Yahoo would
+otherwise silently drop them. Modules not covered by a curated group or
+wrapper (e.g. `price`, `summaryProfile`, `earnings`,
+`netSharePurchaseActivity`) are requested via `quote_summary` directly:
+
+```python
+table = yfin.quote_summary(["AAPL"], modules="netSharePurchaseActivity")
+```
+
+## Column prefixes and `strip_prefix`
+
+Summary columns are prefixed with the module name
+(`insider_transactions_shares`) so multi-module tables never collide.
+Single-module convenience wrappers strip the prefix by default
+(`shares`); pass `strip_prefix=False` to keep it. Multi-module wrappers
+(`asset_profile`, `summary_detail`) keep prefixes because their modules
+share field names (e.g. `maxAge`). `quote_summary(..., strip_prefix=True)`
+raises `ValueError` when stripping would merge distinct columns.

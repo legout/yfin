@@ -24,10 +24,12 @@ from typing import Any
 
 from .arrow import (
     REQUESTED_SYMBOL_KEY,
+    SUMMARY_MODULES,
     build_fundamentals_table,
     build_history_table,
     build_quote_table,
     build_summary_table,
+    strip_summary_prefixes,
     to_polars,
 )
 from .auth import AuthStrategy, YahooAuth, YahooSessionState
@@ -70,18 +72,33 @@ from .summary import (
     OWNERSHIP_MODULES,
     PROFILE_MODULES,
     STATS_MODULES,
+    TREND_MODULES,
     asset_profile,
     asset_profile_async,
     calendar_events,
     calendar_events_async,
+    earnings,
+    earnings_async,
+    earnings_history,
+    earnings_history_async,
     financial_data,
     financial_data_async,
+    fund_ownership,
+    fund_ownership_async,
+    insider_holders,
+    insider_holders_async,
     insider_transactions,
     insider_transactions_async,
     institution_ownership,
     institution_ownership_async,
     key_statistics,
     key_statistics_async,
+    major_direct_holders,
+    major_direct_holders_async,
+    major_holders_breakdown,
+    major_holders_breakdown_async,
+    net_share_purchase_activity,
+    net_share_purchase_activity_async,
     quote_summary,
     quote_summary_async,
     recommendation_trend,
@@ -92,7 +109,7 @@ from .summary import (
     upgrade_downgrade_history_async,
 )
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 __all__ = [
     "__version__",
@@ -126,6 +143,20 @@ __all__ = [
     "institution_ownership_async",
     "insider_transactions",
     "insider_transactions_async",
+    "fund_ownership",
+    "fund_ownership_async",
+    "insider_holders",
+    "insider_holders_async",
+    "major_holders_breakdown",
+    "major_holders_breakdown_async",
+    "major_direct_holders",
+    "major_direct_holders_async",
+    "net_share_purchase_activity",
+    "net_share_purchase_activity_async",
+    "earnings",
+    "earnings_async",
+    "earnings_history",
+    "earnings_history_async",
     # Constants
     "VALUATION_TYPES",
     "INCOME_STATEMENT_TYPES",
@@ -138,7 +169,9 @@ __all__ = [
     "ANALYST_MODULES",
     "OWNERSHIP_MODULES",
     "INSIDER_TRANSACTIONS_MODULES",
+    "TREND_MODULES",
     "ALL_SUMMARY_MODULES",
+    "SUMMARY_MODULES",
     # Polars
     "to_polars",
     # Client
@@ -160,6 +193,7 @@ __all__ = [
     "build_history_table",
     "build_fundamentals_table",
     "build_summary_table",
+    "strip_summary_prefixes",
     "REQUESTED_SYMBOL_KEY",
     # Exceptions
     "YahooError",

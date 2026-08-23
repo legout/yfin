@@ -22,6 +22,8 @@ __all__ = [
     "build_fundamentals_table",
     "INTEGER_TYPES",
     "REQUESTED_SYMBOL_KEY",
+    "SUMMARY_MODULES",
+    "strip_summary_prefixes",
     "to_polars",
 ]
 
@@ -269,13 +271,23 @@ def _empty_history_table() -> pa.Table:
 # ---------------------------------------------------------------------------
 
 # Modules whose payloads are a single flat dict of scalar fields.
+# Nested complex values (lists/dicts) inside these payloads are dropped by
+# the flat path (e.g. ``assetProfile.companyOfficers``).
 _FLAT_SUMMARY_MODULES = frozenset(
     {
         "assetProfile",
+        "summaryProfile",
         "quoteType",
         "summaryDetail",
         "defaultKeyStatistics",
         "financialData",
+        "price",
+        "pageViews",
+        "majorHoldersBreakdown",
+        "netSharePurchaseActivity",
+        "indexTrend",
+        "sectorTrend",
+        "earnings",
     }
 )
 
@@ -287,12 +299,22 @@ _ARRAY_SUMMARY_MODULES: dict[str, str] = {
     "fundOwnership": "ownershipList",
     "insiderTransactions": "transactions",
     "insiderHolders": "holders",
-    "majorHoldersBreakdown": "holders",
+    "majorDirectHolders": "holders",
+    "earningsHistory": "history",
+    "incomeStatementHistory": "incomeStatementHistory",
+    "incomeStatementHistoryQuarterly": "incomeStatementHistory",
     "recommendationTrend": "trend",
 }
 
 # Calendar module is flat-with-nested-earnings; handled specially below.
 _CALENDAR_MODULE = "calendarEvents"
+
+# Every quoteSummary module yfin knows how to materialise (flat, array, or
+# calendar). Yahoo silently drops modules it does not recognise, so sticking
+# to this list guarantees columns come back. ``summary.py`` re-exports it.
+SUMMARY_MODULES: list[str] = sorted(
+    _FLAT_SUMMARY_MODULES | set(_ARRAY_SUMMARY_MODULES) | {_CALENDAR_MODULE}
+)
 
 # Key inside a raw quoteSummary result dict carrying the normalised requested
 # symbol. Set by the provider (``summary._fetch_one``) and consumed by
@@ -535,6 +557,59 @@ def _rows_to_table(rows: list[dict[str, Any]]) -> pa.Table:
 def _empty_summary_table() -> pa.Table:
     """Return an empty summary table with just a symbol column."""
     return pa.table({"symbol": pa.array([], type=pa.string())})
+
+
+def strip_summary_prefixes(table: pa.Table, modules: list[str] | str) -> pa.Table:
+    """Drop the ``<module>_`` column-name prefix of *modules* from *table*.
+
+    Convenience for single-module tables where the module prefix is pure
+    noise (``insider_transactions_shares`` → ``shares``). The ``symbol``
+    column is never stripped. Columns from other modules are left untouched.
+
+    Each column is attributed to the **most specific** known module prefix
+    (``earnings_history_firm`` belongs to ``earningsHistory``, not
+    ``earnings``), so prefix-nested module names are never confused.
+
+    Stripping is validated against the produced names: when two stripped
+    names collide (e.g. stripping both ``assetProfile`` and ``quoteType``,
+    which both carry ``maxAge``), a :class:`ValueError` is raised rather
+    than silently merging the columns.
+    """
+    module_list = [modules] if isinstance(modules, str) else list(modules)
+    strip_prefixes = {camel_to_snake(m) + "_" for m in module_list}
+    # Longest-first so nested names (earnings_ vs earnings_history_) match
+    # their most specific module.
+    known_prefixes = sorted(
+        {camel_to_snake(m) + "_" for m in SUMMARY_MODULES}, key=len, reverse=True
+    )
+    seen: dict[str, str] = {}
+    renames: dict[str, str] = {}
+    for col in table.column_names:
+        if col == "symbol":
+            continue
+        owner = next((p for p in known_prefixes if col.startswith(p)), None)
+        if owner is None or owner not in strip_prefixes:
+            continue
+        stripped = col[len(owner) :]
+        if stripped in seen and seen[stripped] != col:
+            raise ValueError(
+                f"Stripping module prefixes would merge distinct columns "
+                f"{seen[stripped]!r} and {col!r} into {stripped!r}. "
+                f"Strip fewer modules or keep prefixes."
+            )
+        seen[stripped] = col
+        renames[col] = stripped
+    if not renames:
+        return table
+    final_names = [renames.get(c, c) for c in table.column_names]
+    # str() because pyarrow's Cython-typed column_names lacks a precise stub.
+    duplicates = sorted({str(n) for n in final_names if final_names.count(n) > 1})
+    if duplicates:
+        raise ValueError(
+            f"Stripping module prefixes would produce duplicate column names "
+            f"({duplicates}). Strip fewer modules or keep prefixes."
+        )
+    return table.rename_columns(final_names)
 
 
 # ---------------------------------------------------------------------------
